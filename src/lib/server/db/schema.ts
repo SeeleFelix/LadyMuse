@@ -82,8 +82,8 @@ export const promptTemplates = sqliteTable('prompt_templates', {
 	category: text('category'),
 	tags: text('tags'),
 	isBuiltin: integer('is_builtin', { mode: 'boolean' }).default(false),
-	createdAt: text('created_at').default(new Date().toISOString()),
-	updatedAt: text('updated_at').default(new Date().toISOString())
+	createdAt: text('created_at').default('(datetime(\'now\'))'),
+	updatedAt: text('updated_at').default('(datetime(\'now\'))')
 });
 
 export const prompts = sqliteTable('prompts', {
@@ -97,8 +97,8 @@ export const prompts = sqliteTable('prompts', {
 	rating: integer('rating'),
 	tags: text('tags'),
 	source: text('source').default('manual'),
-	createdAt: text('created_at').default(new Date().toISOString()),
-	updatedAt: text('updated_at').default(new Date().toISOString())
+	createdAt: text('created_at').default('(datetime(\'now\'))'),
+	updatedAt: text('updated_at').default('(datetime(\'now\'))')
 });
 
 export const promptVersions = sqliteTable('prompt_versions', {
@@ -108,7 +108,7 @@ export const promptVersions = sqliteTable('prompt_versions', {
 	positive: text('positive').notNull(),
 	negative: text('negative'),
 	diffSummary: text('diff_summary'),
-	createdAt: text('created_at').default(new Date().toISOString())
+	createdAt: text('created_at').default('(datetime(\'now\'))')
 });
 
 export const tags = sqliteTable('tags', {
@@ -138,7 +138,7 @@ export const generations = sqliteTable('generations', {
 	cfgScale: real('cfg_scale'),
 	modelName: text('model_name'),
 	durationMs: integer('duration_ms'),
-	createdAt: text('created_at').default(new Date().toISOString())
+	createdAt: text('created_at').default('(datetime(\'now\'))')
 });
 
 export const generationRatings = sqliteTable('generation_ratings', {
@@ -148,7 +148,7 @@ export const generationRatings = sqliteTable('generation_ratings', {
 	isFavorite: integer('is_favorite', { mode: 'boolean' }).default(false),
 	notes: text('notes'),
 	effectiveKeywords: text('effective_keywords'),
-	createdAt: text('created_at').default(new Date().toISOString())
+	createdAt: text('created_at').default('(datetime(\'now\'))')
 });
 
 export const keywordStats = sqliteTable('keyword_stats', {
@@ -164,7 +164,7 @@ export const keywordStats = sqliteTable('keyword_stats', {
 export const userConfig = sqliteTable('user_config', {
 	key: text('key').notNull().unique(),
 	value: text('value').notNull(),
-	updatedAt: text('updated_at').default(new Date().toISOString())
+	updatedAt: text('updated_at').default('(datetime(\'now\'))')
 });
 
 // Cached Models
@@ -175,15 +175,15 @@ export const cachedModels = sqliteTable('cached_models', {
 	description: text('description'),
 	contextLength: integer('context_length'),
 	pricing: text('pricing'),
-	updatedAt: text('updated_at').default(new Date().toISOString())
+	updatedAt: text('updated_at').default('(datetime(\'now\'))')
 });
 
 // Sessions
 export const sessions = sqliteTable('sessions', {
 	id: integer('id').primaryKey({ autoIncrement: true }),
 	title: text('title').default('新对话'),
-	createdAt: text('created_at').default(new Date().toISOString()),
-	updatedAt: text('updated_at').default(new Date().toISOString())
+	createdAt: text('created_at').default('(datetime(\'now\'))'),
+	updatedAt: text('updated_at').default('(datetime(\'now\'))')
 });
 
 export const sessionMessages = sqliteTable('session_messages', {
@@ -191,7 +191,8 @@ export const sessionMessages = sqliteTable('session_messages', {
 	sessionId: integer('session_id').notNull().references(() => sessions.id),
 	role: text('role').notNull(),
 	content: text('content').notNull(),
-	createdAt: text('created_at').default(new Date().toISOString())
+	toolDetail: text('tool_detail'),
+	createdAt: text('created_at').default('(datetime(\'now\'))')
 });
 
 // Inspiration
@@ -202,5 +203,5 @@ export const inspirationSeeds = sqliteTable('inspiration_seeds', {
 	moodTags: text('mood_tags'),
 	difficulty: text('difficulty').default('any'),
 	isUsed: integer('is_used', { mode: 'boolean' }).default(false),
-	createdAt: text('created_at').default(new Date().toISOString())
+	createdAt: text('created_at').default('(datetime(\'now\'))')
 });

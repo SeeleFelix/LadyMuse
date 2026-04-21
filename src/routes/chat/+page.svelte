@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { Marked } from 'marked';
+	import hljs from 'highlight.js';
 
 	interface Session {
 		id: number;
@@ -11,11 +13,14 @@
 	interface ChatMessage {
 		role: 'user' | 'assistant' | 'tool';
 		content: string;
+		toolDetail?: string;
 	}
 
 	let messages = $state<ChatMessage[]>([]);
 	let input = $state('');
 	let isLoading = $state(false);
+	let abortController = $state<AbortController | null>(null);
+	let expandedTools = $state<Set<number>>(new Set());
 
 	let selectedProvider = $state('openrouter');
 	let selectedModel = $state('');
@@ -40,6 +45,23 @@
 		update_user_profile: '更新用户画像',
 		save_session_summary: '保存会话摘要'
 	};
+
+	const marked = new Marked({
+		renderer: {
+			code({ text, lang }: { text: string; lang?: string }) {
+				const language = lang && hljs.getLanguage(lang) ? lang : undefined;
+				const highlighted = language
+					? hljs.highlight(text, { language }).value
+					: hljs.highlightAuto(text).value;
+				return `<pre class="hljs"><code class="${language ? `language-${language}` : ''}">${highlighted}</code></pre>`;
+			}
+		}
+	});
+
+	function renderMarkdown(text: string): string {
+		if (!text) return '';
+		return marked.parse(text) as string;
+	}
 
 	$effect(() => {
 		if (filteredModels.length > 0 && !filteredModels.find((m) => m.id === selectedModel)) {
@@ -89,7 +111,8 @@
 				const data = await res.json();
 				messages = data.messages.map((m: any) => ({
 					role: m.role,
-					content: m.content
+					content: m.content,
+					toolDetail: m.tool_detail
 				}));
 				currentSessionId = id;
 				showSidebar = false;
@@ -124,13 +147,13 @@
 		return session.id;
 	}
 
-	async function appendToSession(role: string, content: string) {
+	async function appendToSession(role: string, content: string, toolDetail?: string) {
 		try {
 			const sid = await ensureSession();
 			await fetch(`/api/sessions/${sid}`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ role, content })
+				body: JSON.stringify({ role, content, tool_detail: toolDetail })
 			});
 		} catch {}
 	}
@@ -141,6 +164,14 @@
 		return JSON.stringify(result).slice(0, 200);
 	}
 
+	function stopGeneration() {
+		if (abortController) {
+			abortController.abort();
+			abortController = null;
+			isLoading = false;
+		}
+	}
+
 	async function sendMessage() {
 		if (!input.trim() || isLoading) return;
 
@@ -149,17 +180,16 @@
 		input = '';
 		isLoading = true;
 
-		// Track which indices are new (for saving later)
 		const newMsgStart = messages.length - 1;
-
-		// Add initial assistant message for text output
 		messages = [...messages, { role: 'assistant', content: '' }];
 
-		// Current text target: the assistant message that receives text
 		let textTargetIdx = messages.length - 1;
 		let pendingToolIdx = -1;
 
 		const apiMessages = messages.filter((m) => m.role === 'user' || m.role === 'assistant').map((m) => ({ role: m.role, content: m.content }));
+
+		const controller = new AbortController();
+		abortController = controller;
 
 		try {
 			const res = await fetch('/api/chat', {
@@ -169,13 +199,15 @@
 					messages: apiMessages.slice(0, -1),
 					model: selectedModel,
 					provider: selectedProvider
-				})
+				}),
+				signal: controller.signal
 			});
 
 			if (!res.ok) {
 				const err = await res.text();
 				messages[textTargetIdx].content = `[请求失败: ${err}]`;
 				isLoading = false;
+				abortController = null;
 				return;
 			}
 
@@ -201,16 +233,22 @@
 								messages[textTargetIdx].content += event.content;
 							} else if (event.type === 'tool-call') {
 								const toolName = TOOL_NAMES[event.name] || event.name;
-								const toolMsg: ChatMessage = { role: 'tool', content: `🔍 ${toolName}...` };
+								const toolMsg: ChatMessage = {
+									role: 'tool',
+									content: `🔍 ${toolName}...`,
+									toolDetail: JSON.stringify({ name: event.name, input: event.input }, null, 2)
+								};
 								messages = [...messages, toolMsg];
 								pendingToolIdx = messages.length - 1;
 							} else if (event.type === 'tool-result') {
 								if (pendingToolIdx >= 0) {
 									const toolName = TOOL_NAMES[event.name] || event.name;
 									const summary = summarizeToolResult(event.output);
+									const detail = messages[pendingToolIdx].toolDetail || '';
+									const fullDetail = detail + '\n\n--- 结果 ---\n' + (typeof event.output === 'string' ? event.output : JSON.stringify(event.output, null, 2));
 									messages[pendingToolIdx].content = `🔍 ${toolName}: ${summary}`;
+									messages[pendingToolIdx].toolDetail = fullDetail;
 									pendingToolIdx = -1;
-									// After tool result, new assistant message for subsequent text
 									const newAssistant: ChatMessage = { role: 'assistant', content: '' };
 									messages = [...messages, newAssistant];
 									textTargetIdx = messages.length - 1;
@@ -225,19 +263,30 @@
 				}
 			}
 		} catch (e: any) {
-			messages[textTargetIdx].content = `[错误: ${e.message}]`;
+			if (e.name === 'AbortError') {
+				// User stopped generation, keep partial content
+			} else {
+				messages[textTargetIdx].content = `[错误: ${e.message}]`;
+			}
 		}
 
-		// Save all new messages to session
 		for (let i = newMsgStart; i < messages.length; i++) {
 			const msg = messages[i];
 			if (msg.content && msg.content.trim()) {
-				await appendToSession(msg.role, msg.content);
+				await appendToSession(msg.role, msg.content, msg.toolDetail);
 			}
 		}
 		loadSessions();
 
 		isLoading = false;
+		abortController = null;
+	}
+
+	function toggleTool(idx: number) {
+		const next = new Set(expandedTools);
+		if (next.has(idx)) next.delete(idx);
+		else next.add(idx);
+		expandedTools = next;
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
@@ -321,21 +370,36 @@
 				</div>
 			{/if}
 
-			{#each messages as msg}
+			{#each messages as msg, i}
 				{#if msg.role === 'tool'}
 					<div class="flex justify-start">
-						<div class="max-w-[75%] rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-xs text-zinc-500">
-							{msg.content}
+						<div class="max-w-[75%] rounded-lg border border-zinc-700 bg-zinc-900 overflow-hidden">
+							<button
+								onclick={() => toggleTool(i)}
+								class="w-full flex items-center gap-2 px-4 py-2 text-left hover:bg-zinc-800/50 transition-colors"
+							>
+								<svg class="h-3 w-3 text-zinc-500 transition-transform {expandedTools.has(i) ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+								<span class="text-xs text-zinc-400 flex-1">{msg.content}</span>
+							</button>
+							{#if expandedTools.has(i) && msg.toolDetail}
+								<div class="border-t border-zinc-700 px-4 py-2">
+									<pre class="text-xs text-zinc-500 whitespace-pre-wrap font-mono max-h-60 overflow-y-auto">{msg.toolDetail}</pre>
+								</div>
+							{/if}
 						</div>
 					</div>
 				{:else}
-					<div class="flex {msg.role === 'user' ? 'justify-end' : 'justify-start'}">
+					<div class="flex min-w-0 {msg.role === 'user' ? 'justify-end' : 'justify-start'}">
 						<div
-							class="max-w-[75%] rounded-xl px-4 py-3 {msg.role === 'user'
+							class="max-w-[75%] min-w-0 rounded-xl px-4 py-3 {msg.role === 'user'
 								? 'bg-violet-600 text-white'
-								: 'bg-zinc-800 text-zinc-200'}"
+								: 'bg-zinc-800 text-zinc-200 prose prose-invert prose-sm max-w-none overflow-hidden'}"
 						>
-							<pre class="whitespace-pre-wrap font-sans text-sm leading-relaxed">{msg.content}</pre>
+							{#if msg.role === 'user'}
+								<pre class="whitespace-pre-wrap font-sans text-sm leading-relaxed">{msg.content}</pre>
+							{:else}
+								{@html renderMarkdown(msg.content)}
+							{/if}
 						</div>
 					</div>
 				{/if}
@@ -360,12 +424,20 @@
 					rows="2"
 					class="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-sm text-zinc-200 placeholder-zinc-500 focus:border-violet-500 focus:outline-none resize-none"
 				></textarea>
-				<button
-					type="button"
-					onclick={sendMessage}
-					disabled={isLoading || !input.trim()}
-					class="rounded-xl bg-violet-600 px-5 py-3 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed"
-				>{isLoading ? '...' : '发送'}</button>
+				{#if isLoading}
+					<button
+						type="button"
+						onclick={stopGeneration}
+						class="rounded-xl bg-red-600 px-5 py-3 text-sm font-medium text-white hover:bg-red-500"
+					>停止</button>
+				{:else}
+					<button
+						type="button"
+						onclick={sendMessage}
+						disabled={!input.trim()}
+						class="rounded-xl bg-violet-600 px-5 py-3 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed"
+					>发送</button>
+				{/if}
 			</div>
 		</div>
 	</div>

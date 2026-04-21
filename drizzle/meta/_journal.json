@@ -33,8 +33,15 @@
     {
       "idx": 4,
       "version": "6",
-      "when": 1776777481891,
-      "tag": "0004_overjoyed_gorilla_man",
+      "when": 1776782400000,
+      "tag": "0004_add_tool_detail",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1776783141489,
+      "tag": "0005_groovy_hellcat",
       "breakpoints": true
     }
   ]

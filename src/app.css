@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin '@tailwindcss/typography';
 
 * {
 	scrollbar-width: thin;
@@ -20,4 +21,15 @@
 
 *::-webkit-scrollbar-thumb:hover {
 	background: #52525b;
+}
+
+.prose pre {
+	overflow-x: auto;
+	max-width: 100%;
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+.prose :not(pre) > code {
+	word-break: break-all;
 }

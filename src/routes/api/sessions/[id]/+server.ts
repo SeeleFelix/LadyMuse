@@ -18,13 +18,14 @@ export const GET: RequestHandler = async ({ params }) => {
 
 export const POST: RequestHandler = async ({ params, request }) => {
 	const id = Number(params.id);
-	const { role, content } = await request.json();
+	const { role, content, tool_detail } = await request.json();
 	if (!role || !content) return json({ error: 'role and content required' }, { status: 400 });
 
 	const result = await db.insert(sessionMessages).values({
 		sessionId: id,
 		role,
-		content
+		content,
+		toolDetail: tool_detail || null
 	}).returning();
 
 	await db.update(sessions).set({ updatedAt: new Date().toISOString() }).where(eq(sessions.id, id));

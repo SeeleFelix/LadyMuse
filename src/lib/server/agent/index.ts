@@ -17,7 +17,8 @@ interface Message {
 export async function* chatStream(
 	messages: Message[],
 	modelId?: string,
-	providerId?: string
+	providerId?: string,
+	signal?: AbortSignal
 ) {
 	const resolvedModel = modelId || (await getConfig('default_model')) || DEFAULT_MODEL;
 	const resolvedProvider = providerId || 'openrouter';
@@ -71,6 +72,7 @@ export async function* chatStream(
 
 	try {
 		for await (const event of result.fullStream) {
+				if (signal?.aborted) break;
 			if (event.type === 'text-delta') {
 				gotText = true;
 				yield JSON.stringify({ type: 'text', content: event.text }) + '\n';

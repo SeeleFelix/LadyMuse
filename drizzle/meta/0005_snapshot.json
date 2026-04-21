@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "208d12a6-df64-4a08-9720-f91b87a761c7",
-  "prevId": "31e8aa09-9f3e-462b-a2d1-b6696fb5fa39",
+  "id": "931000c5-7b3b-44c8-8097-942292d3a9c9",
+  "prevId": "208d12a6-df64-4a08-9720-f91b87a761c7",
   "tables": {
     "art_categories": {
       "name": "art_categories",
@@ -346,7 +346,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'2026-04-21T14:47:36.172Z'"
+          "default": "'(datetime(''now''))'"
         }
       },
       "indexes": {
@@ -415,7 +415,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'2026-04-21T14:47:36.172Z'"
+          "default": "'(datetime(''now''))'"
         }
       },
       "indexes": {},
@@ -545,7 +545,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'2026-04-21T14:47:36.171Z'"
+          "default": "'(datetime(''now''))'"
         }
       },
       "indexes": {},
@@ -621,7 +621,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'2026-04-21T14:47:36.172Z'"
+          "default": "'(datetime(''now''))'"
         }
       },
       "indexes": {},
@@ -796,7 +796,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'2026-04-21T14:47:36.171Z'"
+          "default": "'(datetime(''now''))'"
         },
         "updated_at": {
           "name": "updated_at",
@@ -804,7 +804,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'2026-04-21T14:47:36.171Z'"
+          "default": "'(datetime(''now''))'"
         }
       },
       "indexes": {},
@@ -864,7 +864,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'2026-04-21T14:47:36.171Z'"
+          "default": "'(datetime(''now''))'"
         }
       },
       "indexes": {},
@@ -967,7 +967,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'2026-04-21T14:47:36.171Z'"
+          "default": "'(datetime(''now''))'"
         },
         "updated_at": {
           "name": "updated_at",
@@ -975,7 +975,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'2026-04-21T14:47:36.171Z'"
+          "default": "'(datetime(''now''))'"
         }
       },
       "indexes": {},
@@ -1042,7 +1042,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'2026-04-21T14:47:36.172Z'"
+          "default": "'(datetime(''now''))'"
         }
       },
       "indexes": {},
@@ -1089,7 +1089,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'2026-04-21T14:47:36.172Z'"
+          "default": "'(datetime(''now''))'"
         },
         "updated_at": {
           "name": "updated_at",
@@ -1097,7 +1097,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'2026-04-21T14:47:36.172Z'"
+          "default": "'(datetime(''now''))'"
         }
       },
       "indexes": {},
@@ -1440,7 +1440,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
-          "default": "'2026-04-21T14:47:36.172Z'"
+          "default": "'(datetime(''now''))'"
         }
       },
       "indexes": {

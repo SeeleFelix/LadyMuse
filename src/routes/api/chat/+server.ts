@@ -13,12 +13,14 @@ export const POST: RequestHandler = async ({ request }) => {
 		async start(controller) {
 			const encoder = new TextEncoder();
 			try {
-				for await (const chunk of chatStream(messages, model, provider)) {
+				for await (const chunk of chatStream(messages, model, provider, request.signal)) {
 					controller.enqueue(encoder.encode(chunk));
 				}
 			} catch (e: any) {
-				console.error('[chat] stream error:', e);
-				controller.enqueue(encoder.encode(`\n\n[Error: ${e.message}]`));
+				if (e.name !== 'AbortError') {
+					console.error('[chat] stream error:', e);
+					controller.enqueue(encoder.encode(JSON.stringify({ type: 'error', content: e.message }) + '\n'));
+				}
 			}
 			controller.close();
 		}
