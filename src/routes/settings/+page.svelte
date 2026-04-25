@@ -1,6 +1,7 @@
 <script lang="ts">
   let openrouterKey = $state("");
   let deepseekKey = $state("");
+  let searxngUrl = $state("");
   let defaultModel = $state("");
   let favoriteModels = $state<string[]>([]);
   let models = $state<
@@ -8,6 +9,7 @@
   >([]);
   let refreshingProvider = $state("");
   let savingProvider = $state("");
+  let savingSearxng = $state(false);
   let message = $state("");
 
   async function loadConfig() {
@@ -16,6 +18,7 @@
       const config = await res.json();
       openrouterKey = config.openrouter_api_key || "";
       deepseekKey = config.deepseek_api_key || "";
+      searxngUrl = config.searxng_url || "";
       defaultModel = config.default_model || "";
       favoriteModels = config.favorite_models
         ? JSON.parse(config.favorite_models)
@@ -76,6 +79,22 @@
       message = "网络错误";
     }
     savingProvider = "";
+  }
+
+  async function saveSearxngUrl() {
+    savingSearxng = true;
+    message = "";
+    try {
+      const res = await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "searxng_url", value: searxngUrl }),
+      });
+      message = res.ok ? "SearXNG 地址已保存" : "保存失败";
+    } catch {
+      message = "网络错误";
+    }
+    savingSearxng = false;
   }
 
   async function saveDefaultModel() {
@@ -201,6 +220,28 @@
       {/if}
     </section>
   {/each}
+
+  <!-- SearXNG Web Search -->
+  <section class="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+    <h2 class="text-lg font-semibold text-zinc-200">SearXNG Web Search</h2>
+    <p class="text-sm text-zinc-500">
+      为 Agent 提供联网搜索能力（自部署的 SearXNG 实例）
+    </p>
+    <div class="flex gap-3">
+      <input
+        type="text"
+        bind:value={searxngUrl}
+        placeholder="http://localhost:8888"
+        class="flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 focus:border-violet-500 focus:outline-none"
+      />
+      <button
+        onclick={saveSearxngUrl}
+        disabled={savingSearxng}
+        class="rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-50"
+        >{savingSearxng ? "保存中..." : "保存"}</button
+      >
+    </div>
+  </section>
 
   <!-- Favorites -->
   {#if favoriteModels.length > 0}

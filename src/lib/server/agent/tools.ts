@@ -18,6 +18,8 @@ import {
   fetchPopularImages,
   fetchTags,
 } from "../civitai";
+import { searxngSearch } from "../searxng";
+import { getConfig } from "../config";
 
 function buildMultiWordFilter(words: string[], fields: any[]) {
   const conditions: any[] = [];
@@ -360,6 +362,41 @@ export const searchCivitaiTags = tool({
   },
 });
 
+export const webSearch = tool({
+  description:
+    "搜索互联网获取实时信息。当用户询问知识库和 Civitai 之外的信息时使用，如艺术家资料、最新画风趋势、技法教程、文化背景等。query 使用英文关键词效果更好。",
+  inputSchema: z.object({
+    query: z.string().describe("搜索关键词，英文效果更好"),
+    search_depth: z
+      .enum(["basic", "advanced"])
+      .optional()
+      .describe("搜索深度，默认 basic"),
+  }),
+  execute: async ({ query, search_depth }) => {
+    const baseUrl = (await getConfig("searxng_url")) || "http://localhost:8888";
+    try {
+      const { results } = await searxngSearch(query, baseUrl, {
+        categories: search_depth === "advanced" ? "general" : "general",
+      });
+      if (results.length === 0) {
+        return `未找到与"${query}"相关的结果`;
+      }
+      return {
+        results: results.slice(0, 10).map((r) => ({
+          title: r.title,
+          url: r.url,
+          content: r.content?.slice(0, 500),
+        })),
+      };
+    } catch (e: any) {
+      return {
+        error: `Web 搜索失败: ${e.message}`,
+        notice: "请直接基于你的专业知识回答。",
+      };
+    }
+  },
+});
+
 export const allTools = {
   knowledge_search: knowledgeSearch,
   search_my_prompts: searchMyPrompts,
@@ -370,4 +407,5 @@ export const allTools = {
   search_civitai_models: searchCivitaiModels,
   search_civitai_prompts: searchCivitaiPrompts,
   search_civitai_tags: searchCivitaiTags,
+  web_search: webSearch,
 };
