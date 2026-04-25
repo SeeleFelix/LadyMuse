@@ -43,6 +43,20 @@
       "when": 1776783141489,
       "tag": "0005_groovy_hellcat",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1776860535843,
+      "tag": "0006_superb_slyde",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1777037822713,
+      "tag": "0007_warm_peter_parker",
+      "breakpoints": true
     }
   ]
 }
