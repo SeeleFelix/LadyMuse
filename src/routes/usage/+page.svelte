@@ -222,7 +222,7 @@
               </div>
 
               <div class="flex-shrink-0 text-[11px] text-zinc-600 tabular-nums">
-                {fmtTokens(log.inputTokens + log.outputTokens)} tok
+                {fmtTokens(log.inputTokens + log.outputTokens)} tokens
               </div>
 
               <div
