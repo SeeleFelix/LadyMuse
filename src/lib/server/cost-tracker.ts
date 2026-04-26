@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { usageLogs, cachedModels, userConfig } from "./db/schema";
+import { usageLogs, cachedModels, userConfig, sessions } from "./db/schema";
 import { eq, sql, and, gte } from "drizzle-orm";
 import { getConfig } from "./config";
 
@@ -292,8 +292,23 @@ export async function getUsageStats(): Promise<{
     .groupBy(usageLogs.currency);
 
   const recentLogs = await db
-    .select()
+    .select({
+      id: usageLogs.id,
+      sessionId: usageLogs.sessionId,
+      provider: usageLogs.provider,
+      modelId: usageLogs.modelId,
+      inputTokens: usageLogs.inputTokens,
+      outputTokens: usageLogs.outputTokens,
+      cacheHitTokens: usageLogs.cacheHitTokens,
+      cost: usageLogs.cost,
+      currency: usageLogs.currency,
+      durationMs: usageLogs.durationMs,
+      metadata: usageLogs.metadata,
+      createdAt: usageLogs.createdAt,
+      sessionTitle: sessions.title,
+    })
     .from(usageLogs)
+    .leftJoin(sessions, eq(usageLogs.sessionId, sessions.id))
     .orderBy(sql`${usageLogs.createdAt} DESC`)
     .limit(50);
 

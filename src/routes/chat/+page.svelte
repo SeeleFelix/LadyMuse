@@ -274,6 +274,8 @@
     const controller = new AbortController();
     abortController = controller;
 
+    await ensureSession();
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",

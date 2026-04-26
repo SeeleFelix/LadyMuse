@@ -12,6 +12,7 @@
     durationMs: number | null;
     metadata: string | null;
     createdAt: string;
+    sessionTitle?: string | null;
   }
 
   interface StatsRow {
@@ -219,6 +220,11 @@
 
               <div class="flex-1 min-w-0">
                 <div class="truncate text-xs text-zinc-400">{log.modelId}</div>
+                {#if log.sessionTitle}
+                  <div class="truncate text-[10px] text-zinc-600">
+                    {log.sessionTitle}
+                  </div>
+                {/if}
               </div>
 
               <div class="flex-shrink-0 text-[11px] text-zinc-600 tabular-nums">
