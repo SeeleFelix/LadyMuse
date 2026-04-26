@@ -22,21 +22,37 @@ const profiles: ModelProfile[] = [
   {
     id: "zit",
     name: "Z Image Turbo",
-    promptStyle: "hybrid",
-    weightSyntax: "parentheses",
+    promptStyle: "natural",
+    weightSyntax: "none",
     defaultParams: {
       sampler: "Euler",
       scheduler: "normal",
-      steps: 6,
-      cfgScale: 1.5,
+      steps: 8,
+      cfgScale: 0,
       width: 1024,
       height: 1024,
     },
     stepRange: [4, 12],
-    cfgRange: [1.0, 4.0],
-    resolutions: ["1024×1024", "832×1216", "1216×832", "960×1088"],
-    negativeRequired: true,
-    tips: "ZIT 是快速模型，建议 4-8 步，低 CFG (1.0-4.0)。关键词和自然语言混合使用效果最佳，支持 (keyword:weight) 权重语法。",
+    cfgRange: [0, 0],
+    resolutions: [
+      "1024×1024",
+      "832×1216",
+      "1216×832",
+      "960×1088",
+      "640×1536",
+      "1536×640",
+    ],
+    negativeRequired: false,
+    tips:
+      "Z-Image-Turbo 是阿里巴巴通义实验室 6B 参数蒸馏加速模型，基于 S3-DiT 架构。" +
+      "8 步极速生成，guidance_scale 必须设为 0（蒸馏模型无 CFG，负面提示词完全无效）。" +
+      "使用详细自然语言描述效果最佳，不要用逗号分隔的标签或 (keyword:weight) 权重语法。" +
+      "提示词控制在 50-60 个英文词以内，最重要的元素放最前面。" +
+      "必须包含质感/材质描述词（skin texture, fabric detail, film grain 等），否则画面容易出现塑料感。" +
+      "支持中英双语混用和文字渲染（将文字放在引号内指定）。" +
+      "光影描述是 ZIT 最强维度，要具体描述光源类型和方向。" +
+      "不需要文字时写 'absolutely no text' 防止画面出现假文字。" +
+      "推荐分辨率 1024×1024，支持 512-2048 任意比例。",
   },
   {
     id: "sdxl",
