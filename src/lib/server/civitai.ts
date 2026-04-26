@@ -1,9 +1,14 @@
-const BASE_URL = "https://civitai.red";
+const BASE_URLS = ["https://civitai.red", "https://civitai.com"];
 const TIMEOUT = 15000;
 
-async function fetchWithRetry(url: string, retries = 1): Promise<any> {
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function fetchWithRetry(url: string, retries = 3): Promise<any> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
+      if (attempt > 0) await sleep(800 * Math.pow(2, attempt - 1));
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), TIMEOUT);
       const res = await fetch(url, { signal: controller.signal });
@@ -14,6 +19,19 @@ async function fetchWithRetry(url: string, retries = 1): Promise<any> {
       if (attempt === retries) throw e;
     }
   }
+}
+
+async function fetchWithFallback(path: string): Promise<any> {
+  let lastError: any;
+  for (const base of BASE_URLS) {
+    try {
+      return await fetchWithRetry(`${base}${path}`);
+    } catch (e: any) {
+      lastError = e;
+      continue;
+    }
+  }
+  throw lastError;
 }
 
 export interface CivitaiModel {
@@ -67,9 +85,7 @@ export async function searchModels(
   });
   if (cursor) params.set("cursor", cursor);
 
-  const data = await fetchWithRetry(
-    `${BASE_URL}/api/v1/models?${params.toString()}`,
-  );
+  const data = await fetchWithFallback(`/api/v1/models?${params.toString()}`);
   const items = (data.items || []).map((m: any) => ({
     id: m.id,
     name: m.name,
@@ -97,9 +113,7 @@ export async function searchImages(
   });
   if (cursor) params.set("cursor", cursor);
 
-  const data = await fetchWithRetry(
-    `${BASE_URL}/api/v1/images?${params.toString()}`,
-  );
+  const data = await fetchWithFallback(`/api/v1/images?${params.toString()}`);
   return {
     items: data.items || [],
     nextCursor: data.metadata?.nextCursor,
@@ -144,9 +158,7 @@ export async function fetchModelImages(
   });
   if (cursor) params.set("cursor", cursor);
 
-  const data = await fetchWithRetry(
-    `${BASE_URL}/api/v1/images?${params.toString()}`,
-  );
+  const data = await fetchWithFallback(`/api/v1/images?${params.toString()}`);
   return {
     items: data.items || [],
     nextCursor: data.metadata?.nextCursor,
@@ -163,9 +175,7 @@ export async function fetchPopularImages(
   });
   if (cursor) params.set("cursor", cursor);
 
-  const data = await fetchWithRetry(
-    `${BASE_URL}/api/v1/images?${params.toString()}`,
-  );
+  const data = await fetchWithFallback(`/api/v1/images?${params.toString()}`);
   return {
     items: data.items || [],
     nextCursor: data.metadata?.nextCursor,
@@ -181,9 +191,7 @@ export async function fetchTags(
     limit: String(limit),
   });
 
-  const data = await fetchWithRetry(
-    `${BASE_URL}/api/v1/tags?${params.toString()}`,
-  );
+  const data = await fetchWithFallback(`/api/v1/tags?${params.toString()}`);
   return {
     items: (data.items || []).map((t: any) => ({
       id: t.id,

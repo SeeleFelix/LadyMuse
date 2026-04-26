@@ -22,6 +22,24 @@
   let abortController = $state<AbortController | null>(null);
   let expandedTools = $state<Set<number>>(new Set());
   let messagesEl = $state<HTMLDivElement | null>(null);
+  let messageCosts = $state<
+    Map<
+      number,
+      {
+        cost: number;
+        currency: string;
+        inputTokens: number;
+        outputTokens: number;
+        cacheHitTokens: number;
+        source: string;
+      }
+    >
+  >(new Map());
+  let sessionCost = $derived(() => {
+    let total = 0;
+    for (const v of messageCosts.values()) total += v.cost;
+    return total;
+  });
 
   let selectedProvider = $state("openrouter");
   let selectedModel = $state("");
@@ -155,6 +173,15 @@
           content: m.content,
           toolDetail: m.toolDetail,
         }));
+        messageCosts = new Map();
+        data.messages.forEach((m: any, i: number) => {
+          if (m.role === "assistant" && m.usageJson) {
+            try {
+              messageCosts.set(i, JSON.parse(m.usageJson));
+            } catch {}
+          }
+        });
+        messageCosts = new Map(messageCosts);
         currentSessionId = id;
         showSidebar = false;
       }
@@ -194,13 +221,19 @@
     role: string,
     content: string,
     toolDetail?: string,
+    usageJson?: string,
   ) {
     try {
       const sid = await ensureSession();
       await fetch(`/api/sessions/${sid}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role, content, tool_detail: toolDetail }),
+        body: JSON.stringify({
+          role,
+          content,
+          tool_detail: toolDetail,
+          usage_json: usageJson,
+        }),
       });
     } catch {}
   }
@@ -232,6 +265,7 @@
 
     let textTargetIdx = messages.length - 1;
     let pendingToolIdx = -1;
+    let costIdx = textTargetIdx;
 
     const apiMessages = messages
       .filter((m) => m.role === "user" || m.role === "assistant")
@@ -248,6 +282,7 @@
           messages: apiMessages.slice(0, -1),
           model: selectedModel,
           provider: selectedProvider,
+          sessionId: currentSessionId,
         }),
         signal: controller.signal,
       });
@@ -314,9 +349,20 @@
                   };
                   messages = [...messages, newAssistant];
                   textTargetIdx = messages.length - 1;
+                  costIdx = textTargetIdx;
                 }
               } else if (event.type === "error") {
                 messages[textTargetIdx].content += `[错误: ${event.content}]`;
+              } else if (event.type === "usage") {
+                messageCosts.set(costIdx, {
+                  cost: event.cost,
+                  currency: event.currency,
+                  inputTokens: event.inputTokens,
+                  outputTokens: event.outputTokens,
+                  cacheHitTokens: event.cacheHitTokens || 0,
+                  source: event.source,
+                });
+                messageCosts = new Map(messageCosts);
               }
 
               messages = [...messages];
@@ -335,7 +381,11 @@
     for (let i = newMsgStart; i < messages.length; i++) {
       const msg = messages[i];
       if (msg.content && msg.content.trim()) {
-        await appendToSession(msg.role, msg.content, msg.toolDetail);
+        let usageJson: string | undefined;
+        if (msg.role === "assistant" && messageCosts.has(i)) {
+          usageJson = JSON.stringify(messageCosts.get(i));
+        }
+        await appendToSession(msg.role, msg.content, msg.toolDetail, usageJson);
       }
     }
     loadSessions();
@@ -495,6 +545,11 @@
         >
       </button>
       <h1 class="text-lg font-semibold text-zinc-100">创作伙伴</h1>
+      {#if sessionCost() > 0}
+        <span class="text-xs text-zinc-500 ml-1"
+          >¥{sessionCost().toFixed(4)}</span
+        >
+      {/if}
       <button
         onclick={newChat}
         class="ml-3 rounded-md border border-dashed border-zinc-700 px-2.5 py-1 text-xs text-zinc-400 hover:border-violet-500 hover:text-violet-400 transition-colors"
@@ -669,16 +724,38 @@
               : 'justify-start'}"
           >
             <div
-              class="max-w-[75%] min-w-0 rounded-xl px-4 py-3 {msg.role ===
-              'user'
-                ? 'bg-violet-600 text-white'
-                : 'bg-zinc-800 text-zinc-200 prose prose-invert prose-sm max-w-none overflow-hidden'}"
+              class="flex flex-col {msg.role === 'user'
+                ? 'items-end'
+                : 'items-start'}"
             >
-              {#if msg.role === "user"}
-                <pre
-                  class="whitespace-pre-wrap font-sans text-sm leading-relaxed">{msg.content}</pre>
-              {:else}
-                {@html renderMarkdown(msg.content)}
+              <div
+                class="max-w-[75%] min-w-0 rounded-xl px-4 py-3 {msg.role ===
+                'user'
+                  ? 'bg-violet-600 text-white'
+                  : 'bg-zinc-800 text-zinc-200 prose prose-invert prose-sm max-w-none overflow-hidden'}"
+              >
+                {#if msg.role === "user"}
+                  <pre
+                    class="whitespace-pre-wrap font-sans text-sm leading-relaxed">{msg.content}</pre>
+                {:else}
+                  {@html renderMarkdown(msg.content)}
+                {/if}
+              </div>
+              {#if msg.role === "assistant" && messageCosts.has(i)}
+                {@const cost = messageCosts.get(i)!}
+                <div
+                  class="mt-1 flex items-center gap-2 text-[10px] text-zinc-600 px-1"
+                >
+                  <span>{cost.inputTokens + cost.outputTokens} tokens</span>
+                  <span class="text-zinc-700">|</span>
+                  <span class="text-zinc-500"
+                    >{cost.currency === "CNY" ? "¥" : "$"}{cost.cost.toFixed(
+                      4,
+                    )}</span
+                  >
+                  <span class="text-zinc-700">|</span>
+                  <span>{cost.source === "reported" ? "实际" : "计算"}</span>
+                </div>
               {/if}
             </div>
           </div>

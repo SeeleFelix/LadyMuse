@@ -21,7 +21,7 @@ export const GET: RequestHandler = async ({ params }) => {
 
 export const POST: RequestHandler = async ({ params, request }) => {
   const id = Number(params.id);
-  const { role, content, tool_detail } = await request.json();
+  const { role, content, tool_detail, usage_json } = await request.json();
   if (!role || !content)
     return json({ error: "role and content required" }, { status: 400 });
 
@@ -32,6 +32,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
       role,
       content,
       toolDetail: tool_detail || null,
+      usageJson: usage_json || null,
     })
     .returning();
 

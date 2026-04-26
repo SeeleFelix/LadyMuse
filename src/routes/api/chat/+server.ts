@@ -3,7 +3,7 @@ import type { RequestHandler } from "./$types";
 import { chatStream, DEFAULT_MODEL } from "$lib/server/agent/index";
 
 export const POST: RequestHandler = async ({ request }) => {
-  const { messages, model, provider } = await request.json();
+  const { messages, model, provider, sessionId } = await request.json();
 
   if (!messages || !Array.isArray(messages)) {
     return json({ error: "messages required" }, { status: 400 });
@@ -17,6 +17,7 @@ export const POST: RequestHandler = async ({ request }) => {
           messages,
           model,
           provider,
+          sessionId,
           request.signal,
         )) {
           controller.enqueue(encoder.encode(chunk));

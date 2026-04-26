@@ -147,9 +147,7 @@ export const promptTags = sqliteTable("prompt_tags", {
 // Generations
 export const generations = sqliteTable("generations", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  promptId: integer("prompt_id")
-    .notNull()
-    .references(() => prompts.id),
+  promptId: integer("prompt_id").references(() => prompts.id),
   comfyuiJobId: text("comfyui_job_id"),
   imagePath: text("image_path").notNull(),
   thumbnailPath: text("thumbnail_path"),
@@ -225,6 +223,7 @@ export const sessionMessages = sqliteTable("session_messages", {
   role: text("role").notNull(),
   content: text("content").notNull(),
   toolDetail: text("tool_detail"),
+  usageJson: text("usage_json"),
   createdAt: text("created_at").default("(datetime('now'))"),
 });
 
@@ -245,4 +244,68 @@ export const syncState = sqliteTable("sync_state", {
   lastCursor: text("last_cursor"),
   syncedCount: integer("synced_count").default(0),
   updatedAt: text("updated_at").default("(datetime('now'))"),
+});
+
+// Image Management (Lightroom-style)
+export const stacks = sqliteTable("stacks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name"),
+  coverImagePath: text("cover_image_path"),
+  collapsed: integer("collapsed", { mode: "boolean" }).default(true),
+  createdAt: text("created_at").default("(datetime('now'))"),
+});
+
+export const imageAttributes = sqliteTable("image_attributes", {
+  relativePath: text("relative_path").primaryKey(),
+  rating: integer("rating").default(0),
+  colorLabel: text("color_label"),
+  flag: text("flag"),
+  notes: text("notes"),
+  stackId: integer("stack_id").references(() => stacks.id),
+  metadataJson: text("metadata_json"),
+  createdAt: text("created_at").default("(datetime('now'))"),
+  updatedAt: text("updated_at").default("(datetime('now'))"),
+});
+
+export const imageTags = sqliteTable("image_tags", {
+  relativePath: text("relative_path").notNull(),
+  tagId: integer("tag_id")
+    .notNull()
+    .references(() => tags.id),
+});
+
+export const collections = sqliteTable("collections", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  description: text("description"),
+  coverImagePath: text("cover_image_path"),
+  isSmart: integer("is_smart", { mode: "boolean" }).default(false),
+  smartCriteria: text("smart_criteria"),
+  createdAt: text("created_at").default("(datetime('now'))"),
+  updatedAt: text("updated_at").default("(datetime('now'))"),
+});
+
+export const collectionImages = sqliteTable("collection_images", {
+  collectionId: integer("collection_id")
+    .notNull()
+    .references(() => collections.id, { onDelete: "cascade" }),
+  relativePath: text("relative_path").notNull(),
+  sortOrder: integer("sort_order").default(0),
+  addedAt: text("added_at").default("(datetime('now'))"),
+});
+
+// Usage Tracking
+export const usageLogs = sqliteTable("usage_logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  sessionId: integer("session_id").references(() => sessions.id),
+  provider: text("provider").notNull(),
+  modelId: text("model_id").notNull(),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  cacheHitTokens: integer("cache_hit_tokens").default(0),
+  cost: real("cost").notNull().default(0),
+  currency: text("currency").notNull().default("CNY"),
+  durationMs: integer("duration_ms"),
+  metadata: text("metadata"),
+  createdAt: text("created_at").default("(datetime('now'))"),
 });

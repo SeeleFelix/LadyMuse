@@ -11,9 +11,10 @@
     { href: "/builder", label: "构建器", icon: "⚡" },
     { href: "/styles", label: "风格库", icon: "◆" },
     { href: "/prompts", label: "提示词", icon: "□" },
-    { href: "/generations", label: "生成记录", icon: "◈" },
+    { href: "/generations", label: "图库", icon: "◈" },
     { href: "/inspiration", label: "灵感", icon: "✦" },
     { href: "/settings", label: "设置", icon: "⚙" },
+    { href: "/usage", label: "用量", icon: "◎" },
   ];
 </script>
 

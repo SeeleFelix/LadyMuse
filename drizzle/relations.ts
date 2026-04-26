@@ -14,6 +14,11 @@ import {
   promptVersions,
   sessions,
   sessionMessages,
+  imageAttributes,
+  imageTags,
+  stacks,
+  collections,
+  collectionImages,
 } from "./schema";
 
 export const artSubcategoriesRelations = relations(
@@ -55,6 +60,7 @@ export const promptTagsRelations = relations(promptTags, ({ one }) => ({
 
 export const tagsRelations = relations(tags, ({ many }) => ({
   promptTags: many(promptTags),
+  imageTags: many(imageTags),
 }));
 
 export const promptsRelations = relations(prompts, ({ one, many }) => ({
@@ -132,3 +138,38 @@ export const sessionMessagesRelations = relations(
 export const sessionsRelations = relations(sessions, ({ many }) => ({
   sessionMessages: many(sessionMessages),
 }));
+
+export const stacksRelations = relations(stacks, ({ many }) => ({
+  imageAttributes: many(imageAttributes),
+}));
+
+export const imageAttributesRelations = relations(
+  imageAttributes,
+  ({ one }) => ({
+    stack: one(stacks, {
+      fields: [imageAttributes.stackId],
+      references: [stacks.id],
+    }),
+  }),
+);
+
+export const imageTagsRelations = relations(imageTags, ({ one }) => ({
+  tag: one(tags, {
+    fields: [imageTags.tagId],
+    references: [tags.id],
+  }),
+}));
+
+export const collectionsRelations = relations(collections, ({ many }) => ({
+  collectionImages: many(collectionImages),
+}));
+
+export const collectionImagesRelations = relations(
+  collectionImages,
+  ({ one }) => ({
+    collection: one(collections, {
+      fields: [collectionImages.collectionId],
+      references: [collections.id],
+    }),
+  }),
+);

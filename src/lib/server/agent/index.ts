@@ -5,6 +5,7 @@ import { buildSystemPrompt } from "./system-prompt";
 import { allTools } from "./tools";
 import { getConfig } from "../config";
 import { getProvider } from "../providers";
+import { calculateCost, checkBudget, logUsage } from "../cost-tracker";
 
 const DEFAULT_MODEL = "anthropic/claude-sonnet-4-6";
 
@@ -18,6 +19,7 @@ export async function* chatStream(
   messages: Message[],
   modelId?: string,
   providerId?: string,
+  sessionId?: number,
   signal?: AbortSignal,
 ) {
   const resolvedModel =
@@ -79,6 +81,24 @@ export async function* chatStream(
     return { role: m.role, content: m.content };
   });
 
+  // Budget check
+  const budget = await checkBudget();
+  if (!budget.allowed) {
+    yield JSON.stringify({
+      type: "budget-warning",
+      dailyCost: budget.dailyCost,
+      monthlyCost: budget.monthlyCost,
+      dailyLimit: budget.dailyLimit,
+      monthlyLimit: budget.monthlyLimit,
+    }) + "\n";
+    yield JSON.stringify({
+      type: "error",
+      content: "预算已超限，请调整预算设置或等待下一周期。",
+    }) + "\n";
+    return;
+  }
+
+  const startTime = Date.now();
   const systemPrompt = await buildSystemPrompt();
   const result = streamText({
     model,
@@ -129,6 +149,42 @@ export async function* chatStream(
         yield JSON.stringify({ type: "text", content: finalText }) + "\n";
       }
     }
+
+    // Capture usage and calculate cost
+    const usage = await result.totalUsage;
+    const durationMs = Date.now() - startTime;
+
+    const resolvedProviderId = providerId || "openrouter";
+    const costResult = await calculateCost(resolvedProviderId, resolvedModel, {
+      inputTokens: usage.inputTokens ?? 0,
+      outputTokens: usage.outputTokens ?? 0,
+      cacheReadTokens: (usage.inputTokenDetails as any)?.cacheReadTokens ?? 0,
+    });
+
+    yield JSON.stringify({
+      type: "usage",
+      inputTokens: usage.inputTokens ?? 0,
+      outputTokens: usage.outputTokens ?? 0,
+      cacheHitTokens: costResult.breakdown.cacheHitTokens,
+      cost: costResult.cost,
+      currency: costResult.currency,
+      breakdown: costResult.breakdown,
+      source: costResult.source,
+      durationMs,
+    }) + "\n";
+
+    await logUsage({
+      sessionId,
+      provider: resolvedProviderId,
+      modelId: resolvedModel,
+      inputTokens: usage.inputTokens ?? 0,
+      outputTokens: usage.outputTokens ?? 0,
+      cacheHitTokens: costResult.breakdown.cacheHitTokens,
+      cost: costResult.cost,
+      currency: costResult.currency,
+      durationMs,
+      metadata: { costSource: costResult.source },
+    });
   } catch (e: any) {
     yield JSON.stringify({ type: "error", content: e.message }) + "\n";
   }
