@@ -2,7 +2,7 @@ import { streamText, stepCountIs } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import { buildSystemPrompt } from "./system-prompt";
-import { allTools } from "./tools";
+import { getEnabledTools } from "./tools";
 import { getConfig } from "../config";
 import { getProvider } from "../providers";
 import { calculateCost, checkBudget, logUsage } from "../cost-tracker";
@@ -81,6 +81,14 @@ export async function* chatStream(
     return { role: m.role, content: m.content };
   });
 
+  const jbEnabled = await getConfig("jailbreak_enabled");
+  if (jbEnabled === "true") {
+    const jbPrompt = await getConfig("jailbreak_prompt");
+    if (jbPrompt) {
+      formattedMessages.push({ role: "user", content: jbPrompt });
+    }
+  }
+
   // Budget check
   const budget = await checkBudget();
   if (!budget.allowed) {
@@ -100,11 +108,14 @@ export async function* chatStream(
 
   const startTime = Date.now();
   const systemPrompt = await buildSystemPrompt();
+  const promptBuildMs = Date.now() - startTime;
+  const streamStart = Date.now();
+
   const result = streamText({
     model,
     system: systemPrompt,
     messages: formattedMessages,
-    tools: allTools,
+    tools: getEnabledTools(),
     stopWhen: stepCountIs(10),
     ...(deepseekProvider && {
       providerOptions: {
@@ -116,20 +127,46 @@ export async function* chatStream(
   });
 
   let gotText = false;
+  let firstTokenMs = 0;
+  let firstReasoningMs = 0;
+  let reasoningEndMs = 0;
+  const toolStartTimes = new Map<string, number>();
+  const toolTimings: { name: string; durationMs: number }[] = [];
 
   try {
     for await (const event of result.fullStream) {
       if (signal?.aborted) break;
-      if (event.type === "text-delta") {
+      if (event.type === "reasoning-delta") {
+        if (!firstReasoningMs) {
+          firstReasoningMs = Date.now() - streamStart;
+        }
+        yield JSON.stringify({
+          type: "reasoning",
+          content: event.text,
+        }) + "\n";
+      } else if (event.type === "text-delta") {
+        if (!gotText) {
+          firstTokenMs = Date.now() - streamStart;
+          if (!reasoningEndMs) reasoningEndMs = firstTokenMs;
+        }
         gotText = true;
         yield JSON.stringify({ type: "text", content: event.text }) + "\n";
       } else if (event.type === "tool-call") {
+        toolStartTimes.set(event.toolName, Date.now());
         yield JSON.stringify({
           type: "tool-call",
           name: event.toolName,
           input: event.input,
         }) + "\n";
       } else if (event.type === "tool-result") {
+        const toolStart = toolStartTimes.get(event.toolName);
+        if (toolStart) {
+          toolTimings.push({
+            name: event.toolName,
+            durationMs: Date.now() - toolStart,
+          });
+          toolStartTimes.delete(event.toolName);
+        }
         const output =
           typeof event.output === "string"
             ? event.output
@@ -149,6 +186,8 @@ export async function* chatStream(
         yield JSON.stringify({ type: "text", content: finalText }) + "\n";
       }
     }
+
+    const totalStreamMs = Date.now() - streamStart;
 
     // Capture usage and calculate cost
     const usage = await result.totalUsage;
@@ -171,6 +210,19 @@ export async function* chatStream(
       breakdown: costResult.breakdown,
       source: costResult.source,
       durationMs,
+    }) + "\n";
+
+    yield JSON.stringify({
+      type: "timing",
+      promptBuildMs,
+      firstTokenMs,
+      firstReasoningMs,
+      reasoningDurationMs:
+        reasoningEndMs && firstReasoningMs
+          ? reasoningEndMs - firstReasoningMs
+          : 0,
+      totalStreamMs,
+      toolTimings,
     }) + "\n";
 
     await logUsage({

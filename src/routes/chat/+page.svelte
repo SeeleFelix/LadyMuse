@@ -35,6 +35,19 @@
       }
     >
   >(new Map());
+  let messageTimings = $state<
+    Map<
+      number,
+      {
+        promptBuildMs: number;
+        firstTokenMs: number;
+        firstReasoningMs: number;
+        reasoningDurationMs: number;
+        totalStreamMs: number;
+        toolTimings: { name: string; durationMs: number }[];
+      }
+    >
+  >(new Map());
   let sessionCost = $derived(() => {
     let total = 0;
     for (const v of messageCosts.values()) total += v.cost;
@@ -174,6 +187,7 @@
           toolDetail: m.toolDetail,
         }));
         messageCosts = new Map();
+        messageTimings = new Map();
         data.messages.forEach((m: any, i: number) => {
           if (m.role === "assistant" && m.usageJson) {
             try {
@@ -365,6 +379,16 @@
                   source: event.source,
                 });
                 messageCosts = new Map(messageCosts);
+              } else if (event.type === "timing") {
+                messageTimings.set(costIdx, {
+                  promptBuildMs: event.promptBuildMs,
+                  firstTokenMs: event.firstTokenMs,
+                  firstReasoningMs: event.firstReasoningMs || 0,
+                  reasoningDurationMs: event.reasoningDurationMs || 0,
+                  totalStreamMs: event.totalStreamMs,
+                  toolTimings: event.toolTimings || [],
+                });
+                messageTimings = new Map(messageTimings);
               }
 
               messages = [...messages];
@@ -726,25 +750,26 @@
               : 'justify-start'}"
           >
             <div
-              class="flex flex-col {msg.role === 'user'
+              class="flex flex-col max-w-[75%] {msg.role === 'user'
                 ? 'items-end'
                 : 'items-start'}"
             >
               <div
-                class="max-w-[75%] min-w-0 rounded-xl px-4 py-3 {msg.role ===
-                'user'
+                class="rounded-xl px-4 py-3 {msg.role === 'user'
                   ? 'bg-violet-600 text-white'
                   : 'bg-zinc-800 text-zinc-200 prose prose-invert prose-sm max-w-none overflow-hidden'}"
               >
                 {#if msg.role === "user"}
-                  <pre
-                    class="whitespace-pre-wrap font-sans text-sm leading-relaxed">{msg.content}</pre>
+                  <div class="whitespace-pre-wrap text-sm leading-relaxed">
+                    {msg.content}
+                  </div>
                 {:else}
                   {@html renderMarkdown(msg.content)}
                 {/if}
               </div>
               {#if msg.role === "assistant" && messageCosts.has(i)}
                 {@const cost = messageCosts.get(i)!}
+                {@const timing = messageTimings.get(i)}
                 <div
                   class="mt-1 flex items-center gap-2 text-[10px] text-zinc-600 px-1"
                 >
@@ -757,6 +782,38 @@
                   >
                   <span class="text-zinc-700">|</span>
                   <span>{cost.source === "reported" ? "实际" : "计算"}</span>
+                  {#if timing}
+                    <span class="text-zinc-700">|</span>
+                    <span class="text-zinc-500"
+                      >{(timing.totalStreamMs / 1000).toFixed(1)}s</span
+                    >
+                    {#if timing.firstReasoningMs}
+                      <span class="text-zinc-700">|</span>
+                      <span class="text-amber-600"
+                        >思考 {(timing.reasoningDurationMs / 1000).toFixed(
+                          1,
+                        )}s</span
+                      >
+                    {/if}
+                    <span class="text-zinc-700">|</span>
+                    <span class="text-zinc-600"
+                      >首字 {(timing.firstTokenMs / 1000).toFixed(1)}s</span
+                    >
+                    {#if timing.toolTimings.length > 0}
+                      <span class="text-zinc-700">|</span>
+                      <span class="text-zinc-600"
+                        >工具 {timing.toolTimings.reduce(
+                          (s, t) => s + t.durationMs,
+                          0,
+                        ) / 1000}s ({timing.toolTimings
+                          .map(
+                            (t) =>
+                              `${t.name.replace(/_/g, " ")} ${(t.durationMs / 1000).toFixed(1)}s`,
+                          )
+                          .join(", ")})</span
+                      >
+                    {/if}
+                  {/if}
                 </div>
               {/if}
             </div>

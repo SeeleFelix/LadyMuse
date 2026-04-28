@@ -294,6 +294,26 @@ export const collectionImages = sqliteTable("collection_images", {
   addedAt: text("added_at").default("(datetime('now'))"),
 });
 
+// Danbooru Cache
+export const danbooruTagGroups = sqliteTable("danbooru_tag_groups", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  topic: text("topic").notNull(),
+  section: text("section").notNull(),
+  tagName: text("tag_name").notNull(),
+  postCount: integer("post_count"),
+  description: text("description"),
+  syncedAt: text("synced_at").notNull(),
+});
+
+export const danbooruSyncLog = sqliteTable("danbooru_sync_log", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  topic: text("topic").notNull(),
+  syncedAt: text("synced_at").notNull(),
+  tagCount: integer("tag_count").notNull(),
+  descriptionsFetched: integer("descriptions_fetched").notNull(),
+  descriptionsPending: integer("descriptions_pending").notNull(),
+});
+
 // Usage Tracking
 export const usageLogs = sqliteTable("usage_logs", {
   id: integer("id").primaryKey({ autoIncrement: true }),

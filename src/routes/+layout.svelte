@@ -14,6 +14,8 @@
     { href: "/generations", label: "图库", icon: "◈" },
     { href: "/inspiration", label: "灵感", icon: "✦" },
     { href: "/settings", label: "设置", icon: "⚙" },
+    { href: "/agent-config", label: "Agent 配置", icon: "⬡" },
+    { href: "/danbooru", label: "Danbooru", icon: "◇" },
     { href: "/usage", label: "用量", icon: "◎" },
   ];
 </script>

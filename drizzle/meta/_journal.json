@@ -85,6 +85,13 @@
       "when": 1777200000000,
       "tag": "0011_add_usage_json",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1777204567706,
+      "tag": "0012_petite_switch",
+      "breakpoints": true
     }
   ]
 }

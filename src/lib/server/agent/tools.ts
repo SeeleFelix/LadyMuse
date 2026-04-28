@@ -1,3 +1,5 @@
+import { readFileSync } from "fs";
+import { join } from "path";
 import { tool } from "ai";
 import { z } from "zod";
 import { db } from "../db";
@@ -20,6 +22,7 @@ import {
 } from "../civitai";
 import { searxngSearch } from "../searxng";
 import { getConfig } from "../config";
+import { getTagsByTopic, type DanbooruTopic } from "../danbooru-sync";
 
 function buildMultiWordFilter(words: string[], fields: any[]) {
   const conditions: any[] = [];
@@ -397,7 +400,70 @@ export const webSearch = tool({
   },
 });
 
-export const allTools = {
+export const discoverVisualConcepts = tool({
+  description:
+    "发现与当前创作主题相关的视觉概念标签。覆盖光影、构图、姿态、色彩、美学风格、背景、手势、景深等。从本地数据库读取 Danbooru 标签数据，用于发现你可能不知道的有用视觉概念。",
+  inputSchema: z.object({
+    topic: z
+      .enum([
+        "lighting",
+        "composition",
+        "posture",
+        "colors",
+        "aesthetic",
+        "background",
+        "gestures",
+        "focus",
+      ])
+      .describe("要探索的视觉概念领域"),
+  }),
+  execute: async ({ topic }) => {
+    try {
+      const tags = await getTagsByTopic(topic as DanbooruTopic);
+      if (tags.length === 0) {
+        return {
+          notice: `本地数据库中没有 "${topic}" 的标签数据。请先在管理页面同步 Danbooru 数据。`,
+          topic,
+        };
+      }
+
+      // Group by section
+      const sections: Record<string, { tags: string[]; topTags: string[] }> =
+        {};
+      for (const tag of tags) {
+        const section = tag.section || "other";
+        if (!sections[section]) {
+          sections[section] = { tags: [], topTags: [] };
+        }
+        sections[section].tags.push(tag.tagName);
+        if (
+          sections[section].topTags.length < 5 &&
+          (tag.postCount ?? 0) > 100
+        ) {
+          sections[section].topTags.push(tag.tagName);
+        }
+      }
+
+      return {
+        topic,
+        totalTags: tags.length,
+        sections: Object.entries(sections).map(([name, data]) => ({
+          section: name,
+          tagCount: data.tags.length,
+          allTags: data.tags,
+          popularTags: data.topTags,
+        })),
+      };
+    } catch (e: any) {
+      return {
+        error: `视觉概念查询失败: ${e.message}`,
+        notice: "请直接基于你的专业知识生成提示词。",
+      };
+    }
+  },
+});
+
+const allToolDefinitions = {
   knowledge_search: knowledgeSearch,
   search_my_prompts: searchMyPrompts,
   save_prompt: savePrompt,
@@ -407,5 +473,39 @@ export const allTools = {
   search_civitai_models: searchCivitaiModels,
   search_civitai_prompts: searchCivitaiPrompts,
   search_civitai_tags: searchCivitaiTags,
+  discover_visual_concepts: discoverVisualConcepts,
   web_search: webSearch,
 };
+
+interface ToolConfig {
+  name: string;
+  enabled: boolean;
+}
+
+function loadEnabledTools(): Record<
+  string,
+  (typeof allToolDefinitions)[keyof typeof allToolDefinitions]
+> {
+  const configPath = join(import.meta.dirname, "prompts", "modules.json");
+  const config: { tools: ToolConfig[] } = JSON.parse(
+    readFileSync(configPath, "utf-8"),
+  );
+  const enabled = new Set(
+    config.tools.filter((t) => t.enabled).map((t) => t.name),
+  );
+  const result: Record<
+    string,
+    (typeof allToolDefinitions)[keyof typeof allToolDefinitions]
+  > = {};
+  for (const [name, def] of Object.entries(allToolDefinitions)) {
+    if (enabled.has(name)) result[name] = def;
+  }
+  return result;
+}
+
+export function getEnabledTools(): Record<
+  string,
+  (typeof allToolDefinitions)[keyof typeof allToolDefinitions]
+> {
+  return loadEnabledTools();
+}

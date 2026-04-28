@@ -47,7 +47,6 @@ const profiles: ModelProfile[] = [
       "Z-Image-Turbo 是阿里巴巴通义实验室 6B 参数蒸馏加速模型，基于 S3-DiT 架构。" +
       "8 步极速生成，guidance_scale 必须设为 0（蒸馏模型无 CFG，负面提示词完全无效）。" +
       "使用详细自然语言描述效果最佳，不要用逗号分隔的标签或 (keyword:weight) 权重语法。" +
-      "提示词控制在 50-60 个英文词以内，最重要的元素放最前面。" +
       "必须包含质感/材质描述词（skin texture, fabric detail, film grain 等），否则画面容易出现塑料感。" +
       "支持中英双语混用和文字渲染（将文字放在引号内指定）。" +
       "光影描述是 ZIT 最强维度，要具体描述光源类型和方向。" +

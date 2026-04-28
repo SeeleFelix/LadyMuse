@@ -26,6 +26,21 @@
   let sortBy = $state<"date" | "rating">("date");
   let copied = $state(false);
   let editingRating = $state(false);
+  let editing = $state(false);
+  let saving = $state(false);
+  let editForm = $state({
+    title: "",
+    positivePrompt: "",
+    negativePrompt: "",
+    notes: "",
+    tags: "",
+    sampler: "",
+    scheduler: "",
+    steps: "",
+    cfgScale: "",
+    width: "",
+    height: "",
+  });
   let showCreateForm = $state(false);
   let creating = $state(false);
   let newPrompt = $state({
@@ -80,6 +95,71 @@
     });
     if (selected?.id === id) selected = { ...selected, rating };
     editingRating = false;
+  }
+
+  function startEdit() {
+    if (!selected) return;
+    editForm = {
+      title: selected.title || "",
+      positivePrompt: selected.positivePrompt,
+      negativePrompt: selected.negativePrompt || "",
+      notes: selected.notes || "",
+      tags: selected.tags || "",
+      sampler: selected.sampler || "",
+      scheduler: selected.scheduler || "",
+      steps: selected.steps?.toString() || "",
+      cfgScale: selected.cfgScale?.toString() || "",
+      width: selected.width?.toString() || "",
+      height: selected.height?.toString() || "",
+    };
+    editing = true;
+  }
+
+  async function saveEdit() {
+    if (!selected || !editForm.positivePrompt.trim()) return;
+    saving = true;
+    try {
+      const body: Record<string, any> = {
+        id: selected.id,
+        title: editForm.title || null,
+        positive_prompt: editForm.positivePrompt,
+        negative_prompt: editForm.negativePrompt || null,
+        notes: editForm.notes || null,
+        tags: editForm.tags || null,
+      };
+      if (editForm.sampler) body.sampler = editForm.sampler;
+      if (editForm.scheduler) body.scheduler = editForm.scheduler;
+      if (editForm.steps) body.steps = parseInt(editForm.steps);
+      if (editForm.cfgScale) body.cfg_scale = parseFloat(editForm.cfgScale);
+      if (editForm.width) body.width = parseInt(editForm.width);
+      if (editForm.height) body.height = parseInt(editForm.height);
+
+      const res = await fetch("/api/prompts", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        selected = {
+          ...selected!,
+          title: editForm.title || null,
+          positivePrompt: editForm.positivePrompt,
+          negativePrompt: editForm.negativePrompt || null,
+          notes: editForm.notes || null,
+          tags: editForm.tags || null,
+          sampler: editForm.sampler || null,
+          scheduler: editForm.scheduler || null,
+          steps: editForm.steps ? parseInt(editForm.steps) : null,
+          cfgScale: editForm.cfgScale ? parseFloat(editForm.cfgScale) : null,
+          width: editForm.width ? parseInt(editForm.width) : null,
+          height: editForm.height ? parseInt(editForm.height) : null,
+        };
+        editing = false;
+        loadPrompts();
+      }
+    } finally {
+      saving = false;
+    }
   }
 
   async function createPrompt() {
@@ -309,7 +389,10 @@
       {:else}
         {#each prompts as p}
           <button
-            onclick={() => (selected = p)}
+            onclick={() => {
+              selected = p;
+              editing = false;
+            }}
             class="w-full text-left rounded-lg border {selected?.id === p.id
               ? 'border-violet-500/50 bg-violet-600/10'
               : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700'} p-3 transition-colors"
@@ -361,141 +444,260 @@
               >
             </div>
           </div>
-          <button
-            onclick={() => {
-              if (confirm("确定删除？")) deletePrompt(selected!.id);
-            }}
-            class="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-red-400 hover:bg-red-600/10 hover:border-red-500/50"
-            >删除</button
-          >
-        </div>
-
-        <!-- Rating -->
-        <div class="mt-4">
-          {#if editingRating}
-            <div class="flex gap-1">
-              {#each [1, 2, 3, 4, 5] as r}
-                <button
-                  onclick={() => updateRating(selected!.id, r)}
-                  class="text-lg {r <= (selected?.rating ?? 0)
-                    ? 'text-amber-400'
-                    : 'text-zinc-600'} hover:text-amber-300">★</button
-                >
-              {/each}
+          <div class="flex gap-2">
+            {#if !editing}
               <button
-                onclick={() => (editingRating = false)}
-                class="ml-2 text-xs text-zinc-500">取消</button
+                onclick={startEdit}
+                class="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-violet-400 hover:bg-violet-600/10 hover:border-violet-500/50"
+                >编辑</button
               >
-            </div>
-          {:else}
+            {/if}
             <button
-              onclick={() => (editingRating = true)}
-              class="text-sm {selected.rating
-                ? 'text-amber-400'
-                : 'text-zinc-600 hover:text-zinc-400'}"
-            >
-              {selected.rating ? renderStars(selected.rating) : "点击评分"}
-            </button>
-          {/if}
-        </div>
-
-        <!-- Positive prompt -->
-        <div class="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-sm font-medium text-zinc-300">正向提示词</h3>
-            <button
-              onclick={() => copyText(selected!.positivePrompt)}
-              class="rounded bg-violet-600 px-3 py-1 text-xs text-white hover:bg-violet-500"
-              >{copied ? "已复制!" : "复制"}</button
+              onclick={() => {
+                if (confirm("确定删除？")) deletePrompt(selected!.id);
+              }}
+              class="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-red-400 hover:bg-red-600/10 hover:border-red-500/50"
+              >删除</button
             >
           </div>
-          <pre
-            class="whitespace-pre-wrap text-xs text-violet-300 leading-relaxed">{selected.positivePrompt}</pre>
         </div>
 
-        <!-- Negative prompt -->
-        {#if selected.negativePrompt}
-          <div class="mt-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-            <div class="flex items-center justify-between mb-2">
-              <h3 class="text-sm font-medium text-zinc-300">反向提示词</h3>
+        {#if editing}
+          <!-- Edit form -->
+          <div class="mt-4 space-y-4">
+            <div>
+              <label class="text-xs text-zinc-400 mb-1 block">标题</label>
+              <input
+                type="text"
+                bind:value={editForm.title}
+                placeholder="为提示词命名..."
+                class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-300 placeholder-zinc-500 focus:border-violet-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label class="text-xs text-zinc-400 mb-1 block"
+                >正向提示词 *</label
+              >
+              <textarea
+                bind:value={editForm.positivePrompt}
+                rows="6"
+                class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-violet-300 placeholder-zinc-500 focus:border-violet-500 focus:outline-none resize-y"
+              ></textarea>
+            </div>
+            <div>
+              <label class="text-xs text-zinc-400 mb-1 block">反向提示词</label>
+              <textarea
+                bind:value={editForm.negativePrompt}
+                rows="3"
+                class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-red-300/70 placeholder-zinc-500 focus:border-violet-500 focus:outline-none resize-y"
+              ></textarea>
+            </div>
+            <div>
+              <label class="text-xs text-zinc-400 mb-1 block"
+                >标签（逗号分隔）</label
+              >
+              <input
+                type="text"
+                bind:value={editForm.tags}
+                placeholder="标签1, 标签2, ..."
+                class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-300 placeholder-zinc-500 focus:border-violet-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label class="text-xs text-zinc-400 mb-1 block">备注</label>
+              <textarea
+                bind:value={editForm.notes}
+                rows="3"
+                class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-400 placeholder-zinc-500 focus:border-violet-500 focus:outline-none resize-y"
+              ></textarea>
+            </div>
+            <details>
+              <summary
+                class="text-xs text-zinc-500 cursor-pointer hover:text-zinc-300"
+                >生成参数</summary
+              >
+              <div class="mt-2 grid grid-cols-3 gap-2">
+                <input
+                  type="text"
+                  bind:value={editForm.sampler}
+                  placeholder="Sampler"
+                  class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-300 placeholder-zinc-500 focus:border-violet-500 focus:outline-none"
+                />
+                <input
+                  type="text"
+                  bind:value={editForm.scheduler}
+                  placeholder="Scheduler"
+                  class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-300 placeholder-zinc-500 focus:border-violet-500 focus:outline-none"
+                />
+                <input
+                  type="number"
+                  bind:value={editForm.steps}
+                  placeholder="Steps"
+                  class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-300 placeholder-zinc-500 focus:border-violet-500 focus:outline-none"
+                />
+                <input
+                  type="number"
+                  bind:value={editForm.cfgScale}
+                  placeholder="CFG Scale"
+                  class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-300 placeholder-zinc-500 focus:border-violet-500 focus:outline-none"
+                />
+                <input
+                  type="number"
+                  bind:value={editForm.width}
+                  placeholder="Width"
+                  class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-300 placeholder-zinc-500 focus:border-violet-500 focus:outline-none"
+                />
+                <input
+                  type="number"
+                  bind:value={editForm.height}
+                  placeholder="Height"
+                  class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-300 placeholder-zinc-500 focus:border-violet-500 focus:outline-none"
+                />
+              </div>
+            </details>
+            <div class="flex gap-3">
               <button
-                onclick={() => copyText(selected!.negativePrompt!)}
-                class="rounded bg-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-600"
-                >复制</button
+                onclick={saveEdit}
+                disabled={!editForm.positivePrompt.trim() || saving}
+                class="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? "保存中..." : "保存"}
+              </button>
+              <button
+                onclick={() => (editing = false)}
+                class="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200"
+                >取消</button
+              >
+            </div>
+          </div>
+        {:else}
+          <!-- Rating -->
+          <div class="mt-4">
+            {#if editingRating}
+              <div class="flex gap-1">
+                {#each [1, 2, 3, 4, 5] as r}
+                  <button
+                    onclick={() => updateRating(selected!.id, r)}
+                    class="text-lg {r <= (selected?.rating ?? 0)
+                      ? 'text-amber-400'
+                      : 'text-zinc-600'} hover:text-amber-300">★</button
+                  >
+                {/each}
+                <button
+                  onclick={() => (editingRating = false)}
+                  class="ml-2 text-xs text-zinc-500">取消</button
+                >
+              </div>
+            {:else}
+              <button
+                onclick={() => (editingRating = true)}
+                class="text-sm {selected.rating
+                  ? 'text-amber-400'
+                  : 'text-zinc-600 hover:text-zinc-400'}"
+              >
+                {selected.rating ? renderStars(selected.rating) : "点击评分"}
+              </button>
+            {/if}
+          </div>
+
+          <!-- Positive prompt -->
+          <div class="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-sm font-medium text-zinc-300">正向提示词</h3>
+              <button
+                onclick={() => copyText(selected!.positivePrompt)}
+                class="rounded bg-violet-600 px-3 py-1 text-xs text-white hover:bg-violet-500"
+                >{copied ? "已复制!" : "复制"}</button
               >
             </div>
             <pre
-              class="whitespace-pre-wrap text-xs text-red-300/70 leading-relaxed">{selected.negativePrompt}</pre>
+              class="whitespace-pre-wrap text-xs text-violet-300 leading-relaxed">{selected.positivePrompt}</pre>
           </div>
-        {/if}
 
-        <!-- Generation params -->
-        {#if selected.sampler || selected.steps || selected.cfgScale || selected.width}
-          <div class="mt-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-            <h3 class="text-sm font-medium text-zinc-300 mb-3">生成参数</h3>
-            <div class="grid grid-cols-3 gap-3">
-              {#if selected.sampler}
-                <div class="text-xs">
-                  <span class="text-zinc-500">Sampler:</span>
-                  <span class="text-zinc-200">{selected.sampler}</span>
-                </div>
-              {/if}
-              {#if selected.scheduler}
-                <div class="text-xs">
-                  <span class="text-zinc-500">Scheduler:</span>
-                  <span class="text-zinc-200">{selected.scheduler}</span>
-                </div>
-              {/if}
-              {#if selected.steps}
-                <div class="text-xs">
-                  <span class="text-zinc-500">Steps:</span>
-                  <span class="text-zinc-200">{selected.steps}</span>
-                </div>
-              {/if}
-              {#if selected.cfgScale}
-                <div class="text-xs">
-                  <span class="text-zinc-500">CFG:</span>
-                  <span class="text-zinc-200">{selected.cfgScale}</span>
-                </div>
-              {/if}
-              {#if selected.width && selected.height}
-                <div class="text-xs">
-                  <span class="text-zinc-500">分辨率:</span>
-                  <span class="text-zinc-200"
-                    >{selected.width}×{selected.height}</span
-                  >
-                </div>
-              {/if}
-            </div>
-          </div>
-        {/if}
-
-        <!-- Tags -->
-        {#if selected.tags}
-          <div class="mt-4">
-            <h3 class="text-sm font-medium text-zinc-300 mb-2">标签</h3>
-            <div class="flex flex-wrap gap-1.5">
-              {#each selected.tags
-                .split(",")
-                .map((t) => t.trim())
-                .filter(Boolean) as tag}
-                <span
-                  class="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-400"
-                  >{tag}</span
+          <!-- Negative prompt -->
+          {#if selected.negativePrompt}
+            <div class="mt-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-sm font-medium text-zinc-300">反向提示词</h3>
+                <button
+                  onclick={() => copyText(selected!.negativePrompt!)}
+                  class="rounded bg-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-600"
+                  >复制</button
                 >
-              {/each}
+              </div>
+              <pre
+                class="whitespace-pre-wrap text-xs text-red-300/70 leading-relaxed">{selected.negativePrompt}</pre>
             </div>
-          </div>
-        {/if}
+          {/if}
 
-        <!-- Notes -->
-        {#if selected.notes}
-          <div class="mt-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-            <h3 class="text-sm font-medium text-zinc-300 mb-2">备注</h3>
-            <p class="text-xs text-zinc-400 leading-relaxed">
-              {selected.notes}
-            </p>
-          </div>
+          <!-- Generation params -->
+          {#if selected.sampler || selected.steps || selected.cfgScale || selected.width}
+            <div class="mt-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+              <h3 class="text-sm font-medium text-zinc-300 mb-3">生成参数</h3>
+              <div class="grid grid-cols-3 gap-3">
+                {#if selected.sampler}
+                  <div class="text-xs">
+                    <span class="text-zinc-500">Sampler:</span>
+                    <span class="text-zinc-200">{selected.sampler}</span>
+                  </div>
+                {/if}
+                {#if selected.scheduler}
+                  <div class="text-xs">
+                    <span class="text-zinc-500">Scheduler:</span>
+                    <span class="text-zinc-200">{selected.scheduler}</span>
+                  </div>
+                {/if}
+                {#if selected.steps}
+                  <div class="text-xs">
+                    <span class="text-zinc-500">Steps:</span>
+                    <span class="text-zinc-200">{selected.steps}</span>
+                  </div>
+                {/if}
+                {#if selected.cfgScale}
+                  <div class="text-xs">
+                    <span class="text-zinc-500">CFG:</span>
+                    <span class="text-zinc-200">{selected.cfgScale}</span>
+                  </div>
+                {/if}
+                {#if selected.width && selected.height}
+                  <div class="text-xs">
+                    <span class="text-zinc-500">分辨率:</span>
+                    <span class="text-zinc-200"
+                      >{selected.width}×{selected.height}</span
+                    >
+                  </div>
+                {/if}
+              </div>
+            </div>
+          {/if}
+
+          <!-- Tags -->
+          {#if selected.tags}
+            <div class="mt-4">
+              <h3 class="text-sm font-medium text-zinc-300 mb-2">标签</h3>
+              <div class="flex flex-wrap gap-1.5">
+                {#each selected.tags
+                  .split(",")
+                  .map((t) => t.trim())
+                  .filter(Boolean) as tag}
+                  <span
+                    class="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-400"
+                    >{tag}</span
+                  >
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          <!-- Notes -->
+          {#if selected.notes}
+            <div class="mt-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+              <h3 class="text-sm font-medium text-zinc-300 mb-2">备注</h3>
+              <p class="text-xs text-zinc-400 leading-relaxed">
+                {selected.notes}
+              </p>
+            </div>
+          {/if}
         {/if}
       </div>
     {:else}

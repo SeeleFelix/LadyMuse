@@ -1,0 +1,82 @@
+{
+  "modules": [
+    {
+      "file": "00-persona.md",
+      "enabled": true
+    },
+    {
+      "file": "01-creative-methodology.md",
+      "enabled": true
+    },
+    {
+      "file": "02-civitai-guidance.md",
+      "enabled": true
+    },
+    {
+      "file": "03-light-methodology.md",
+      "enabled": true
+    },
+    {
+      "file": "04-composition-methodology.md",
+      "enabled": true
+    },
+    {
+      "file": "05-color-methodology.md",
+      "enabled": true
+    },
+    {
+      "file": "06-camera-methodology.md",
+      "enabled": true
+    },
+    {
+      "file": "07-texture-methodology.md",
+      "enabled": true
+    }
+  ],
+  "tools": [
+    {
+      "name": "knowledge_search",
+      "enabled": false
+    },
+    {
+      "name": "search_my_prompts",
+      "enabled": true
+    },
+    {
+      "name": "save_prompt",
+      "enabled": true
+    },
+    {
+      "name": "get_user_profile",
+      "enabled": true
+    },
+    {
+      "name": "update_user_profile",
+      "enabled": true
+    },
+    {
+      "name": "save_session_summary",
+      "enabled": false
+    },
+    {
+      "name": "search_civitai_models",
+      "enabled": false
+    },
+    {
+      "name": "search_civitai_prompts",
+      "enabled": true
+    },
+    {
+      "name": "search_civitai_tags",
+      "enabled": false
+    },
+    {
+      "name": "discover_visual_concepts",
+      "enabled": false
+    },
+    {
+      "name": "web_search",
+      "enabled": true
+    }
+  ]
+}
