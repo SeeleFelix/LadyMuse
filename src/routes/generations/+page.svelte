@@ -6,6 +6,7 @@
   import ConfirmDialog from "$lib/components/gallery/ConfirmDialog.svelte";
   import Toast from "$lib/components/gallery/Toast.svelte";
   import CollectionPanel from "$lib/components/gallery/CollectionPanel.svelte";
+  import ContextMenu from "$lib/components/gallery/ContextMenu.svelte";
 
   interface SamplerInfo {
     id: string;
@@ -68,11 +69,18 @@
 
   // State
   let loading = $state(false);
+  let loadingMore = $state(false);
   let browseImages = $state<BrowseImage[]>([]);
   let browsePage = $state(1);
   let browseTotal = $state(0);
   let browseHasMore = $state(false);
   let browseSort = $state<SortMode>("date-desc");
+  let searchQuery = $state("");
+  let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let fetchGeneration = 0;
+  let scrollContainerEl: HTMLDivElement | undefined = $state();
+  let sentinelEl: HTMLDivElement | undefined = $state();
+  let observer: IntersectionObserver | null = null;
 
   let selectedImage = $state<BrowseImage | null>(null);
   let selectedPaths = $state<Set<string>>(new Set());
@@ -88,7 +96,6 @@
   let compareImages = $state<{ relativePath: string; filename: string }[]>([]);
   let deleteConfirm = $state<{
     paths: string[];
-    requireInput: string;
     message: string;
   } | null>(null);
   let toasts = $state<
@@ -96,6 +103,10 @@
   >([]);
   let showAddToCollection = $state(false);
   let toastCounter = 0;
+  let contextMenuVisible = $state(false);
+  let contextMenuX = $state(0);
+  let contextMenuY = $state(0);
+  let contextMenuImage = $state<BrowseImage | null>(null);
 
   const colorClassMap: Record<string, string> = {
     red: "bg-red-500",
@@ -104,8 +115,6 @@
     blue: "bg-blue-500",
     purple: "bg-purple-500",
   };
-
-  let totalPages = $derived(Math.ceil(browseTotal / 24));
 
   function getImageUrl(relativePath: string): string {
     return `/api/comfyui/images/${encodeURIComponent(relativePath)}`;
@@ -130,14 +139,25 @@
   }
 
   // Data loading
+  function buildBrowseUrl(page: number): string {
+    let url = `/api/comfyui/browse?page=${page}&page_size=24&sort=${browseSort}`;
+    if (activeCollectionId != null) {
+      url += `&collection_id=${activeCollectionId}`;
+    }
+    if (searchQuery.trim()) {
+      url += `&search=${encodeURIComponent(searchQuery.trim())}`;
+    }
+    return url;
+  }
+
   async function loadBrowseImages() {
+    const gen = ++fetchGeneration;
     loading = true;
+    browseImages = [];
+    browsePage = 1;
     try {
-      let url = `/api/comfyui/browse?page=${browsePage}&page_size=24&sort=${browseSort}`;
-      if (activeCollectionId != null) {
-        url += `&collection_id=${activeCollectionId}`;
-      }
-      const res = await fetch(url);
+      const res = await fetch(buildBrowseUrl(1));
+      if (gen !== fetchGeneration) return;
       if (res.ok) {
         const data = await res.json();
         browseImages = data.images;
@@ -148,9 +168,35 @@
         showToast(err.error || "加载失败", "error");
       }
     } catch (e: any) {
+      if (gen !== fetchGeneration) return;
       showToast(`网络错误: ${e.message}`, "error");
     }
-    loading = false;
+    if (gen === fetchGeneration) loading = false;
+  }
+
+  async function loadMoreImages() {
+    if (loadingMore || !browseHasMore || loading) return;
+    const gen = ++fetchGeneration;
+    loadingMore = true;
+    const nextPage = browsePage + 1;
+    try {
+      const res = await fetch(buildBrowseUrl(nextPage));
+      if (gen !== fetchGeneration) return;
+      if (res.ok) {
+        const data = await res.json();
+        browseImages = [...browseImages, ...data.images];
+        browseTotal = data.total;
+        browsePage = nextPage;
+        browseHasMore = data.hasMore;
+      } else {
+        const err = await res.json();
+        showToast(err.error || "加载失败", "error");
+      }
+    } catch (e: any) {
+      if (gen !== fetchGeneration) return;
+      showToast(`网络错误: ${e.message}`, "error");
+    }
+    if (gen === fetchGeneration) loadingMore = false;
   }
 
   async function loadCollections() {
@@ -279,12 +325,93 @@
     }
   }
 
+  function handleContextMenu(img: BrowseImage, index: number, e: MouseEvent) {
+    e.preventDefault();
+    if (!selectedPaths.has(img.relativePath)) {
+      selectedPaths = new Set([img.relativePath]);
+      selectedImage = img;
+      lastClickedIndex = index;
+    }
+    contextMenuImage = img;
+    contextMenuX = e.clientX;
+    contextMenuY = e.clientY;
+    contextMenuVisible = true;
+  }
+
+  function copyPrompt() {
+    if (!contextMenuImage?.metadata?.positivePrompts?.length) {
+      showToast("该图片没有可复制的提示词", "info");
+      return;
+    }
+    const text = contextMenuImage.metadata.positivePrompts.join("\n");
+    navigator.clipboard.writeText(text).then(
+      () => showToast("提示词已复制", "success"),
+      () => showToast("复制失败", "error"),
+    );
+    contextMenuVisible = false;
+  }
+
+  function copyImageUrl() {
+    if (!contextMenuImage) return;
+    const url = `${window.location.origin}${getImageUrl(contextMenuImage.relativePath)}`;
+    navigator.clipboard.writeText(url).then(
+      () => showToast("图片链接已复制", "success"),
+      () => showToast("复制失败", "error"),
+    );
+    contextMenuVisible = false;
+  }
+
+  function contextMenuRate(rating: number) {
+    if (selectedPaths.size > 1) bulkRate(rating);
+    else handleRate(rating);
+    contextMenuVisible = false;
+  }
+
+  function contextMenuColor(color: string | null) {
+    if (selectedPaths.size > 1) bulkColor(color!);
+    else handleColor(color);
+    contextMenuVisible = false;
+  }
+
+  function contextMenuFlag(flag: string | null) {
+    if (selectedPaths.size > 1) bulkFlag(flag!);
+    else handleFlag(flag);
+    contextMenuVisible = false;
+  }
+
+  function contextMenuAddToCollection(collectionId: number) {
+    addToCollection(collectionId);
+    contextMenuVisible = false;
+  }
+
+  function contextMenuDelete() {
+    if (selectedPaths.size > 1) startBulkDelete();
+    else startSingleDelete();
+    contextMenuVisible = false;
+  }
+
+  function contextMenuOpenLightbox() {
+    if (!contextMenuImage) return;
+    const idx = browseImages.findIndex(
+      (img) => img.relativePath === contextMenuImage!.relativePath,
+    );
+    if (idx >= 0) {
+      lightboxIndex = idx;
+      lightboxOpen = true;
+    }
+    contextMenuVisible = false;
+  }
+
+  function contextMenuCompare() {
+    openCompare();
+    contextMenuVisible = false;
+  }
+
   // Delete
   function startSingleDelete() {
     if (!selectedImage) return;
     deleteConfirm = {
       paths: [selectedImage.relativePath],
-      requireInput: selectedImage.filename,
       message: `确定要删除 "${selectedImage.filename}" 吗？`,
     };
   }
@@ -292,8 +419,7 @@
   function startBulkDelete() {
     deleteConfirm = {
       paths: [...selectedPaths],
-      requireInput: "DELETE",
-      message: `确定要删除 ${selectedPaths.size} 张图片吗？此操作不可逆。`,
+      message: `确定要删除 ${selectedPaths.size} 张图片吗？`,
     };
   }
 
@@ -340,9 +466,9 @@
   // Collection callbacks
   function handleSelectCollection(id: number | null) {
     activeCollectionId = id;
-    browsePage = 1;
     selectedImage = null;
     selectedPaths = new Set();
+    loadBrowseImages();
   }
 
   async function handleCreateCollection(name: string) {
@@ -411,8 +537,16 @@
 
   // Keyboard shortcuts
   function handleKeydown(e: KeyboardEvent) {
+    if (e.key === "Escape" && contextMenuVisible) {
+      contextMenuVisible = false;
+      return;
+    }
     if (lightboxOpen || compareOpen || deleteConfirm) return;
     if (e.key === "Escape") {
+      if (contextMenuVisible) {
+        contextMenuVisible = false;
+        return;
+      }
       selectedImage = null;
       selectedPaths = new Set();
     } else if (e.key === "Delete" && selectedPaths.size > 0) {
@@ -442,13 +576,48 @@
     }
   }
 
+  // Search debounce — skip initial run, onMount handles first load
+  let searchEffectInitialized = false;
   $effect(() => {
-    loadBrowseImages();
+    const q = searchQuery;
+    if (!searchEffectInitialized) {
+      searchEffectInitialized = true;
+      return;
+    }
+    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      loadBrowseImages();
+    }, 400);
   });
 
   onMount(() => {
+    loadBrowseImages();
     loadCollections();
     loadAllTags();
+
+    observer = new IntersectionObserver(
+      (entries) => {
+        if (
+          entries[0].isIntersecting &&
+          browseHasMore &&
+          !loadingMore &&
+          !loading
+        ) {
+          loadMoreImages();
+        }
+      },
+      { root: scrollContainerEl || null, rootMargin: "200px", threshold: 0 },
+    );
+
+    return () => observer?.disconnect();
+  });
+
+  // Observe sentinel when it appears
+  $effect(() => {
+    if (sentinelEl && observer) {
+      observer.observe(sentinelEl!);
+      return () => observer?.unobserve(sentinelEl!);
+    }
   });
 </script>
 
@@ -468,7 +637,7 @@
   <div class="flex-1 flex flex-col overflow-hidden">
     <!-- Header -->
     <div class="border-b border-zinc-800 px-4 py-2.5 flex items-center gap-3">
-      <h2 class="text-sm font-medium text-zinc-300">
+      <h2 class="text-sm font-medium text-zinc-300 whitespace-nowrap">
         {activeCollectionId
           ? collections.find((c) => c.id === activeCollectionId)?.name ||
             "收藏集"
@@ -476,35 +645,25 @@
         <span class="text-zinc-600 ml-1">{browseTotal}</span>
       </h2>
 
+      <div class="flex-1 max-w-xs">
+        <input
+          type="text"
+          bind:value={searchQuery}
+          placeholder="搜索提示词..."
+          class="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs text-zinc-300 placeholder-zinc-600 focus:border-violet-500 focus:outline-none"
+        />
+      </div>
+
       <div class="ml-auto flex items-center gap-2">
         <select
           bind:value={browseSort}
-          onchange={() => {
-            browsePage = 1;
-          }}
+          onchange={() => loadBrowseImages()}
           class="rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300 focus:border-violet-500 focus:outline-none"
         >
           <option value="date-desc">最新优先</option>
           <option value="date-asc">最旧优先</option>
           <option value="name">文件名</option>
         </select>
-
-        <span class="text-xs text-zinc-500">{browsePage}/{totalPages || 1}</span
-        >
-        <button
-          onclick={() => (browsePage = Math.max(1, browsePage - 1))}
-          disabled={browsePage <= 1}
-          class="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 disabled:opacity-30"
-          >←</button
-        >
-        <button
-          onclick={() => {
-            if (browseHasMore) browsePage++;
-          }}
-          disabled={!browseHasMore}
-          class="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 disabled:opacity-30"
-          >→</button
-        >
       </div>
     </div>
 
@@ -583,8 +742,8 @@
     {/if}
 
     <!-- Grid -->
-    <div class="flex-1 overflow-y-auto p-4">
-      {#if loading}
+    <div class="flex-1 overflow-y-auto p-4" bind:this={scrollContainerEl}>
+      {#if loading && browseImages.length === 0}
         <div class="flex items-center justify-center h-full">
           <p class="text-zinc-500 text-sm">加载中...</p>
         </div>
@@ -610,6 +769,7 @@
                 lightboxIndex = i;
                 lightboxOpen = true;
               }}
+              oncontextmenu={(e) => handleContextMenu(img, i, e)}
               class="group relative rounded-lg border {selectedPaths.has(
                 img.relativePath,
               )
@@ -697,6 +857,17 @@
             </button>
           {/each}
         </div>
+
+        <!-- Infinite scroll sentinel -->
+        <div bind:this={sentinelEl} class="py-4 flex justify-center">
+          {#if loadingMore}
+            <p class="text-zinc-500 text-sm">加载更多...</p>
+          {:else if !browseHasMore}
+            <p class="text-zinc-600 text-xs">已加载全部图片</p>
+          {:else}
+            <p class="text-zinc-600 text-xs"></p>
+          {/if}
+        </div>
       {/if}
     </div>
   </div>
@@ -733,6 +904,7 @@
       filename: img.filename,
     }))}
     currentIndex={lightboxIndex}
+    contextMenuOpen={contextMenuVisible}
     onclose={() => (lightboxOpen = false)}
     onnavigate={(i) => {
       lightboxIndex = i;
@@ -740,6 +912,15 @@
         selectedImage = browseImages[i];
         selectedPaths = new Set([browseImages[i].relativePath]);
       }
+    }}
+    oncontextmenu={(e) => {
+      const img = browseImages[lightboxIndex];
+      if (!img) return;
+      contextMenuImage = img;
+      selectedImage = img;
+      contextMenuX = e.clientX;
+      contextMenuY = e.clientY;
+      contextMenuVisible = true;
     }}
   />
 {/if}
@@ -751,9 +932,28 @@
 {#if deleteConfirm}
   <ConfirmDialog
     message={deleteConfirm.message}
-    requireInput={deleteConfirm.requireInput}
     onconfirm={confirmDelete}
     oncancel={() => (deleteConfirm = null)}
+  />
+{/if}
+
+{#if contextMenuVisible}
+  <ContextMenu
+    x={contextMenuX}
+    y={contextMenuY}
+    image={contextMenuImage}
+    selectedCount={selectedPaths.size}
+    {collections}
+    onclose={() => (contextMenuVisible = false)}
+    onopenlightbox={contextMenuOpenLightbox}
+    onrate={contextMenuRate}
+    oncolor={contextMenuColor}
+    onflag={contextMenuFlag}
+    onaddtocollection={contextMenuAddToCollection}
+    oncopyprompt={copyPrompt}
+    oncopyimageurl={copyImageUrl}
+    oncompare={contextMenuCompare}
+    ondelete={contextMenuDelete}
   />
 {/if}
 

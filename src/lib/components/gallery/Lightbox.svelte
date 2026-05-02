@@ -2,13 +2,17 @@
   let {
     images = [],
     currentIndex = 0,
+    contextMenuOpen = false,
     onclose,
     onnavigate,
+    oncontextmenu,
   }: {
     images: { relativePath: string; filename: string }[];
     currentIndex: number;
+    contextMenuOpen?: boolean;
     onclose: () => void;
     onnavigate?: (index: number) => void;
+    oncontextmenu?: (e: MouseEvent) => void;
   } = $props();
 
   let scale = $state(1);
@@ -91,8 +95,10 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape") onclose();
-    else if (e.key === "ArrowRight") goNext();
+    if (e.key === "Escape") {
+      if (contextMenuOpen) return;
+      onclose();
+    } else if (e.key === "ArrowRight") goNext();
     else if (e.key === "ArrowLeft") goPrev();
     else if (e.key === "+" || e.key === "=")
       scale = Math.min(MAX_SCALE, scale * 1.2);
@@ -213,6 +219,10 @@
         src={getImageUrl(currentImage.relativePath)}
         alt=""
         onclick={toggleZoom}
+        oncontextmenu={(e) => {
+          e.preventDefault();
+          oncontextmenu?.(e);
+        }}
         class="max-w-full max-h-full select-none {scale <= 1
           ? 'object-contain cursor-zoom-in'
           : 'cursor-zoom-out'}"
