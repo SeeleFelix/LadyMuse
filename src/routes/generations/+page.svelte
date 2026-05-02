@@ -107,9 +107,6 @@
   let contextMenuX = $state(0);
   let contextMenuY = $state(0);
   let contextMenuImage = $state<BrowseImage | null>(null);
-  let lastTotal = $state(-1);
-  let lastLatestMtime = $state(-1);
-  let pollTimer: ReturnType<typeof setInterval> | null = null;
 
   const colorClassMap: Record<string, string> = {
     red: "bg-red-500",
@@ -594,28 +591,6 @@
     }
   }
 
-  async function pollNewImages() {
-    if (document.visibilityState !== "visible") return;
-    try {
-      const res = await fetch("/api/comfyui/check-new");
-      if (!res.ok) return;
-      const { total, latestMtime } = await res.json();
-      if (lastTotal < 0) {
-        lastTotal = total;
-        lastLatestMtime = latestMtime;
-        return;
-      }
-      if (total !== lastTotal || latestMtime !== lastLatestMtime) {
-        lastTotal = total;
-        lastLatestMtime = latestMtime;
-        await silentRefreshImages();
-        showToast("发现新图片，已自动刷新", "info");
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-
   // Search debounce — skip initial run, onMount handles first load
   let searchEffectInitialized = false;
   $effect(() => {
@@ -649,11 +624,26 @@
       { root: scrollContainerEl || null, rootMargin: "200px", threshold: 0 },
     );
 
-    pollTimer = setInterval(pollNewImages, 15_000);
+    // SSE for auto-refresh
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    function connectSSE() {
+      const es = new EventSource("/api/comfyui/watch");
+      es.onmessage = () => {
+        silentRefreshImages();
+        showToast("发现新图片，已自动刷新", "info");
+      };
+      es.onerror = () => {
+        es.close();
+        reconnectTimer = setTimeout(connectSSE, 5000);
+      };
+      return es;
+    }
+    let es = connectSSE();
 
     return () => {
       observer?.disconnect();
-      if (pollTimer) clearInterval(pollTimer);
+      es.close();
+      if (reconnectTimer) clearTimeout(reconnectTimer);
     };
   });
 
@@ -700,6 +690,25 @@
       </div>
 
       <div class="ml-auto flex items-center gap-2">
+        <button
+          onclick={() => loadBrowseImages()}
+          class="rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:border-zinc-600 hover:text-zinc-100 transition-colors"
+          title="刷新"
+        >
+          <svg
+            class="w-3.5 h-3.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+        </button>
         <select
           bind:value={browseSort}
           onchange={() => loadBrowseImages()}

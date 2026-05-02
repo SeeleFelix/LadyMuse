@@ -172,19 +172,6 @@ export async function resolveImagePath(
   return absPath;
 }
 
-export async function checkForNewImages(): Promise<{
-  total: number;
-  latestMtime: number;
-}> {
-  const outputDir = await getOutputDir();
-  if (!outputDir || !existsSync(outputDir)) {
-    return { total: 0, latestMtime: 0 };
-  }
-  const files = collectImageFiles(outputDir);
-  const latestMtime = files.reduce((max, f) => Math.max(max, f.mtimeMs), 0);
-  return { total: files.length, latestMtime };
-}
-
 export function clearCache(): void {
   metadataCache.clear();
   fileListCache.clear();
