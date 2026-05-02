@@ -155,23 +155,34 @@
     loading = true;
     browseImages = [];
     browsePage = 1;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30_000);
     try {
-      const res = await fetch(buildBrowseUrl(1));
-      if (gen !== fetchGeneration) return;
-      if (res.ok) {
-        const data = await res.json();
-        browseImages = data.images;
-        browseTotal = data.total;
-        browseHasMore = data.hasMore;
-      } else {
-        const err = await res.json();
-        showToast(err.error || "加载失败", "error");
+      const res = await fetch(buildBrowseUrl(1), { signal: controller.signal });
+      if (gen === fetchGeneration) {
+        if (res.ok) {
+          const data = await res.json();
+          browseImages = data.images;
+          browseTotal = data.total;
+          browseHasMore = data.hasMore;
+        } else {
+          const err = await res.json();
+          showToast(err.error || "加载失败", "error");
+        }
       }
     } catch (e: any) {
-      if (gen !== fetchGeneration) return;
-      showToast(`网络错误: ${e.message}`, "error");
+      if (gen === fetchGeneration) {
+        showToast(
+          e.name === "AbortError"
+            ? "加载超时，请重试"
+            : `网络错误: ${e.message}`,
+          "error",
+        );
+      }
+    } finally {
+      clearTimeout(timeoutId);
+      if (gen === fetchGeneration) loading = false;
     }
-    if (gen === fetchGeneration) loading = false;
   }
 
   async function loadMoreImages() {
@@ -181,22 +192,25 @@
     const nextPage = browsePage + 1;
     try {
       const res = await fetch(buildBrowseUrl(nextPage));
-      if (gen !== fetchGeneration) return;
-      if (res.ok) {
-        const data = await res.json();
-        browseImages = [...browseImages, ...data.images];
-        browseTotal = data.total;
-        browsePage = nextPage;
-        browseHasMore = data.hasMore;
-      } else {
-        const err = await res.json();
-        showToast(err.error || "加载失败", "error");
+      if (gen === fetchGeneration) {
+        if (res.ok) {
+          const data = await res.json();
+          browseImages = [...browseImages, ...data.images];
+          browseTotal = data.total;
+          browsePage = nextPage;
+          browseHasMore = data.hasMore;
+        } else {
+          const err = await res.json();
+          showToast(err.error || "加载失败", "error");
+        }
       }
     } catch (e: any) {
-      if (gen !== fetchGeneration) return;
-      showToast(`网络错误: ${e.message}`, "error");
+      if (gen === fetchGeneration) {
+        showToast(`网络错误: ${e.message}`, "error");
+      }
+    } finally {
+      if (gen === fetchGeneration) loadingMore = false;
     }
-    if (gen === fetchGeneration) loadingMore = false;
   }
 
   async function loadCollections() {
@@ -650,8 +664,11 @@
   // Observe sentinel when it appears
   $effect(() => {
     if (sentinelEl && observer) {
-      observer.observe(sentinelEl!);
-      return () => observer?.unobserve(sentinelEl!);
+      const el = sentinelEl;
+      observer.observe(el);
+      return () => {
+        if (el.isConnected) observer?.unobserve(el);
+      };
     }
   });
 </script>

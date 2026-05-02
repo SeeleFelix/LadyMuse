@@ -34,46 +34,54 @@ export const GET: RequestHandler = async ({ url }) => {
   const flag = url.searchParams.get("flag");
   const tagFilter = url.searchParams.get("tag");
   const collectionId = url.searchParams.get("collection_id");
+  const searchQuery = url.searchParams.get("search");
 
-  const result = await browseImages(page, pageSize, sort);
+  // When searching, fetch recent files to filter in-memory before slicing
+  const effectivePageSize = searchQuery ? 2000 : pageSize;
+  const effectivePage = searchQuery ? 1 : page;
+  const result = await browseImages(effectivePage, effectivePageSize, sort);
 
   // Enrich with attributes and tags from DB
   if (result.images.length > 0) {
     const paths = result.images.map((img) => img.relativePath);
 
-    // Fetch attributes
-    const attrs =
-      paths.length > 0
-        ? await db
-            .select()
-            .from(imageAttributes)
-            .where(inArray(imageAttributes.relativePath, paths))
-        : [];
-    const attrMap = new Map(attrs.map((a) => [a.relativePath, a]));
-
-    // Fetch tags
-    const imgTags =
-      paths.length > 0
-        ? await db
-            .select({
-              relativePath: imageTags.relativePath,
-              tagId: tags.id,
-              tagName: tags.name,
-              tagSlug: tags.slug,
-            })
-            .from(imageTags)
-            .leftJoin(tags, eq(imageTags.tagId, tags.id))
-            .where(inArray(imageTags.relativePath, paths))
-        : [];
+    // Batch inArray queries to stay under SQLite variable limits
+    const BATCH = 500;
+    const attrMap = new Map<string, (typeof imageAttributes)["$inferSelect"]>();
     const tagMap = new Map<
       string,
       { id: number; name: string; slug: string }[]
     >();
-    for (const t of imgTags) {
-      if (!t.tagId) continue;
-      const list = tagMap.get(t.relativePath) || [];
-      list.push({ id: t.tagId, name: t.tagName || "", slug: t.tagSlug || "" });
-      tagMap.set(t.relativePath, list);
+
+    for (let i = 0; i < paths.length; i += BATCH) {
+      const batch = paths.slice(i, i + BATCH);
+
+      const attrs = await db
+        .select()
+        .from(imageAttributes)
+        .where(inArray(imageAttributes.relativePath, batch));
+      for (const a of attrs) attrMap.set(a.relativePath, a);
+
+      const imgTags = await db
+        .select({
+          relativePath: imageTags.relativePath,
+          tagId: tags.id,
+          tagName: tags.name,
+          tagSlug: tags.slug,
+        })
+        .from(imageTags)
+        .leftJoin(tags, eq(imageTags.tagId, tags.id))
+        .where(inArray(imageTags.relativePath, batch));
+      for (const t of imgTags) {
+        if (!t.tagId) continue;
+        const list = tagMap.get(t.relativePath) || [];
+        list.push({
+          id: t.tagId,
+          name: t.tagName || "",
+          slug: t.tagSlug || "",
+        });
+        tagMap.set(t.relativePath, list);
+      }
     }
 
     // Attach to images
@@ -152,6 +160,40 @@ export const GET: RequestHandler = async ({ url }) => {
       const removed = result.images.length - filtered.length;
       result.images = filtered;
       result.total -= removed;
+    }
+
+    // Search filter: match against positive/negative prompts
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      filtered = result.images.filter((img) => {
+        const meta = (img as any).metadata as {
+          positivePrompts?: string[];
+          negativePrompts?: string[];
+        } | null;
+        if (!meta) return false;
+        const positiveMatch = meta.positivePrompts?.some((p) =>
+          p.toLowerCase().includes(q),
+        );
+        const negativeMatch = meta.negativePrompts?.some((p) =>
+          p.toLowerCase().includes(q),
+        );
+        return positiveMatch || negativeMatch;
+      });
+      result.images = filtered;
+      result.total = filtered.length;
+    }
+
+    // Re-paginate after search filtering
+    if (searchQuery) {
+      const start = (page - 1) * pageSize;
+      const pagedImages = filtered.slice(start, start + pageSize);
+      return json({
+        images: pagedImages,
+        total: filtered.length,
+        page,
+        pageSize,
+        hasMore: start + pageSize < filtered.length,
+      });
     }
   }
 
