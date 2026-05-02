@@ -107,6 +107,9 @@
   let contextMenuX = $state(0);
   let contextMenuY = $state(0);
   let contextMenuImage = $state<BrowseImage | null>(null);
+  let lastTotal = $state(-1);
+  let lastLatestMtime = $state(-1);
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
 
   const colorClassMap: Record<string, string> = {
     red: "bg-red-500",
@@ -576,6 +579,43 @@
     }
   }
 
+  // Auto-refresh: silent update without clearing images or showing loading
+  async function silentRefreshImages() {
+    try {
+      const res = await fetch(buildBrowseUrl(1));
+      if (!res.ok) return;
+      const data = await res.json();
+      browseImages = data.images;
+      browseTotal = data.total;
+      browseHasMore = data.hasMore;
+      browsePage = 1;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function pollNewImages() {
+    if (document.visibilityState !== "visible") return;
+    try {
+      const res = await fetch("/api/comfyui/check-new");
+      if (!res.ok) return;
+      const { total, latestMtime } = await res.json();
+      if (lastTotal < 0) {
+        lastTotal = total;
+        lastLatestMtime = latestMtime;
+        return;
+      }
+      if (total !== lastTotal || latestMtime !== lastLatestMtime) {
+        lastTotal = total;
+        lastLatestMtime = latestMtime;
+        await silentRefreshImages();
+        showToast("发现新图片，已自动刷新", "info");
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   // Search debounce — skip initial run, onMount handles first load
   let searchEffectInitialized = false;
   $effect(() => {
@@ -609,7 +649,12 @@
       { root: scrollContainerEl || null, rootMargin: "200px", threshold: 0 },
     );
 
-    return () => observer?.disconnect();
+    pollTimer = setInterval(pollNewImages, 15_000);
+
+    return () => {
+      observer?.disconnect();
+      if (pollTimer) clearInterval(pollTimer);
+    };
   });
 
   // Observe sentinel when it appears
