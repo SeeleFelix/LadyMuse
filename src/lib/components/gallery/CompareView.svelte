@@ -144,7 +144,7 @@
         <img
           src={getImageUrl(img.relativePath, img.modifiedAt)}
           alt=""
-          class="w-full h-full object-cover select-none"
+          class="w-full h-full object-contain select-none"
           style="transform: scale({scale}) translate({translateX /
             scale}px, {translateY / scale}px); transition: {isDragging
             ? 'none'
