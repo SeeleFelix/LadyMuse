@@ -3,7 +3,7 @@
     images = [],
     onclose,
   }: {
-    images: { relativePath: string; filename: string }[];
+    images: { relativePath: string; filename: string; modifiedAt?: string }[];
     onclose: () => void;
   } = $props();
 
@@ -66,8 +66,9 @@
     else if (e.key === "0") resetTransform();
   }
 
-  function getImageUrl(relativePath: string): string {
-    return `/api/comfyui/images/${encodeURIComponent(relativePath)}`;
+  function getImageUrl(relativePath: string, modifiedAt?: string): string {
+    const base = `/api/comfyui/images/${encodeURIComponent(relativePath)}`;
+    return modifiedAt ? `${base}?t=${new Date(modifiedAt).getTime()}` : base;
   }
 
   $effect(() => {
@@ -141,7 +142,7 @@
           {img.filename}
         </div>
         <img
-          src={getImageUrl(img.relativePath)}
+          src={getImageUrl(img.relativePath, img.modifiedAt)}
           alt=""
           class="w-full h-full object-cover select-none"
           style="transform: scale({scale}) translate({translateX /

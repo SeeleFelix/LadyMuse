@@ -94,8 +94,9 @@
     });
   }
 
-  function getImageUrl(relativePath: string): string {
-    return `/api/comfyui/images/${encodeURIComponent(relativePath)}`;
+  function getImageUrl(relativePath: string, modifiedAt?: string): string {
+    const base = `/api/comfyui/images/${encodeURIComponent(relativePath)}`;
+    return modifiedAt ? `${base}?t=${new Date(modifiedAt).getTime()}` : base;
   }
 
   let colorValue = $state(attributes?.colorLabel ?? null);
@@ -182,7 +183,7 @@
   <!-- Image preview -->
   <div class="rounded-lg overflow-hidden bg-zinc-800 mb-4">
     <img
-      src={getImageUrl(image.relativePath)}
+      src={getImageUrl(image.relativePath, image.modifiedAt)}
       alt=""
       class="w-full cursor-pointer"
       onclick={onzoom}

@@ -7,7 +7,7 @@
     onnavigate,
     oncontextmenu,
   }: {
-    images: { relativePath: string; filename: string }[];
+    images: { relativePath: string; filename: string; modifiedAt?: string }[];
     currentIndex: number;
     contextMenuOpen?: boolean;
     onclose: () => void;
@@ -105,8 +105,9 @@
     else if (e.key === "-") scale = Math.max(MIN_SCALE, scale / 1.2);
   }
 
-  function getImageUrl(relativePath: string): string {
-    return `/api/comfyui/images/${encodeURIComponent(relativePath)}`;
+  function getImageUrl(relativePath: string, modifiedAt?: string): string {
+    const base = `/api/comfyui/images/${encodeURIComponent(relativePath)}`;
+    return modifiedAt ? `${base}?t=${new Date(modifiedAt).getTime()}` : base;
   }
 
   $effect(() => {
@@ -216,7 +217,7 @@
       {/if}
 
       <img
-        src={getImageUrl(currentImage.relativePath)}
+        src={getImageUrl(currentImage.relativePath, currentImage.modifiedAt)}
         alt=""
         onclick={toggleZoom}
         oncontextmenu={(e) => {
@@ -249,7 +250,7 @@
             : 'opacity-60 hover:opacity-100'} overflow-hidden"
         >
           <img
-            src={getImageUrl(img.relativePath)}
+            src={getImageUrl(img.relativePath, img.modifiedAt)}
             alt=""
             class="w-full h-full object-cover"
             loading="lazy"

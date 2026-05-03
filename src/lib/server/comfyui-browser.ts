@@ -34,16 +34,6 @@ const metadataCache = new Map<
   string,
   { mtimeMs: number; metadata: ComfyUIMetadata | null }
 >();
-// File list cache: key = output dir path, value = { mtimeMs, files }
-const fileListCache = new Map<
-  string,
-  {
-    mtimeMs: number;
-    files: { relativePath: string; size: number; mtimeMs: number }[];
-  }
->();
-
-const FILE_LIST_CACHE_TTL = 30_000; // 30s
 
 export async function getOutputDir(): Promise<string | null> {
   return getConfig("comfyui_output_dir");
@@ -53,10 +43,6 @@ function collectImageFiles(
   outputDir: string,
 ): { relativePath: string; size: number; mtimeMs: number }[] {
   const dirStat = statSync(outputDir);
-  const cached = fileListCache.get(outputDir);
-  if (cached && Date.now() - cached.mtimeMs < FILE_LIST_CACHE_TTL) {
-    return cached.files;
-  }
 
   const files: { relativePath: string; size: number; mtimeMs: number }[] = [];
 
@@ -85,7 +71,6 @@ function collectImageFiles(
   }
 
   walk(outputDir);
-  fileListCache.set(outputDir, { mtimeMs: Date.now(), files });
   return files;
 }
 
@@ -174,5 +159,4 @@ export async function resolveImagePath(
 
 export function clearCache(): void {
   metadataCache.clear();
-  fileListCache.clear();
 }

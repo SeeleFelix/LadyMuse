@@ -7,7 +7,7 @@ import {
   collectionImages,
 } from "$lib/server/db/schema";
 import { eq, sql } from "drizzle-orm";
-import { resolveImagePath } from "$lib/server/comfyui-browser";
+import { resolveImagePath, clearCache } from "$lib/server/comfyui-browser";
 import { unlinkSync } from "node:fs";
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -26,6 +26,7 @@ export const POST: RequestHandler = async ({ request }) => {
   // Delete from filesystem
   try {
     unlinkSync(absPath);
+    clearCache();
   } catch (e: any) {
     return json(
       { error: `Failed to delete file: ${e.message}` },

@@ -30,7 +30,7 @@ export const GET: RequestHandler = async ({ params, url }) => {
   return new Response(stream as any, {
     headers: {
       "Content-Type": contentType,
-      "Cache-Control": "public, max-age=3600",
+      "Cache-Control": "no-store",
       "Content-Length": stat.size.toString(),
     },
   });

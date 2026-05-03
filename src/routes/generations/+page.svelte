@@ -116,8 +116,9 @@
     purple: "bg-purple-500",
   };
 
-  function getImageUrl(relativePath: string): string {
-    return `/api/comfyui/images/${encodeURIComponent(relativePath)}`;
+  function getImageUrl(relativePath: string, modifiedAt?: string): string {
+    const base = `/api/comfyui/images/${encodeURIComponent(relativePath)}`;
+    return modifiedAt ? `${base}?t=${new Date(modifiedAt).getTime()}` : base;
   }
 
   function formatFileSize(bytes: number): string {
@@ -853,7 +854,7 @@
                 class="aspect-square bg-zinc-800 flex items-center justify-center relative"
               >
                 <img
-                  src={getImageUrl(img.relativePath)}
+                  src={getImageUrl(img.relativePath, img.modifiedAt)}
                   alt=""
                   loading="lazy"
                   class="w-full h-full object-cover"
