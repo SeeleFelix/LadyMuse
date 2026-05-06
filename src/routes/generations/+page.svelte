@@ -591,16 +591,27 @@
     }
   }
 
-  // Auto-refresh: silent update without clearing images or showing loading
+  // Auto-refresh: prepend new images without replacing existing ones
   async function silentRefreshImages() {
     try {
       const res = await fetch(buildBrowseUrl(1));
       if (!res.ok) return;
       const data = await res.json();
-      browseImages = data.images;
+
       browseTotal = data.total;
       browseHasMore = data.hasMore;
-      browsePage = 1;
+
+      const existingPaths = new Set(
+        browseImages.map((img) => img.relativePath),
+      );
+      const newImages = data.images.filter(
+        (img) => !existingPaths.has(img.relativePath),
+      );
+
+      if (newImages.length > 0) {
+        browseImages = [...newImages, ...browseImages];
+        if (lightboxOpen) lightboxIndex += newImages.length;
+      }
     } catch {
       /* ignore */
     }
@@ -857,7 +868,7 @@
                   src={getImageUrl(img.relativePath, img.modifiedAt)}
                   alt=""
                   loading="lazy"
-                  class="w-full h-full object-cover"
+                  class="w-full h-full object-contain"
                 />
                 {#if img.attributes?.colorLabel}
                   <div
@@ -868,13 +879,13 @@
                 {/if}
                 {#if img.attributes?.flag === "pick"}
                   <div
-                    class="absolute top-1 left-1 text-green-400 text-xs font-bold bg-black/50 rounded px-1"
+                    class="absolute bottom-1 left-1 text-green-400 text-xs font-bold bg-black/50 rounded px-1"
                   >
                     P
                   </div>
                 {:else if img.attributes?.flag === "reject"}
                   <div
-                    class="absolute top-1 left-1 text-red-400 text-xs font-bold bg-black/50 rounded px-1"
+                    class="absolute bottom-1 left-1 text-red-400 text-xs font-bold bg-black/50 rounded px-1"
                   >
                     R
                   </div>

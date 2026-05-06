@@ -1,11 +1,18 @@
 <script lang="ts">
-  let { flag = $bindable(null as string | null) }: { flag?: string | null } =
+  let {
+    flag = null as string | null,
+    onchange,
+  }: { flag?: string | null; onchange?: (flag: string | null) => void } =
     $props();
+
+  function toggle(target: string) {
+    onchange?.(flag === target ? null : target);
+  }
 </script>
 
 <div class="flex items-center gap-2">
   <button
-    onclick={() => (flag = flag === "pick" ? null : "pick")}
+    onclick={() => toggle("pick")}
     class="flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors {flag ===
     'pick'
       ? 'bg-white/10 text-white'
@@ -27,7 +34,7 @@
     Pick
   </button>
   <button
-    onclick={() => (flag = flag === "reject" ? null : "reject")}
+    onclick={() => toggle("reject")}
     class="flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors {flag ===
     'reject'
       ? 'bg-red-500/20 text-red-300'

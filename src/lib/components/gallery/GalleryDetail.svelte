@@ -98,20 +98,6 @@
     const base = `/api/comfyui/images/${encodeURIComponent(relativePath)}`;
     return modifiedAt ? `${base}?t=${new Date(modifiedAt).getTime()}` : base;
   }
-
-  let colorValue = $state(attributes?.colorLabel ?? null);
-  let flagValue = $state(attributes?.flag ?? null);
-
-  $effect(() => {
-    if (colorValue !== (attributes?.colorLabel ?? null)) {
-      oncolor(colorValue);
-    }
-  });
-  $effect(() => {
-    if (flagValue !== (attributes?.flag ?? null)) {
-      onflag(flagValue);
-    }
-  });
 </script>
 
 <div
@@ -199,13 +185,13 @@
   <!-- Color Label -->
   <div class="mb-3">
     <div class="text-xs text-zinc-500 mb-1">颜色标记</div>
-    <ColorLabel bind:value={colorValue} />
+    <ColorLabel value={attributes?.colorLabel ?? null} onchange={oncolor} />
   </div>
 
   <!-- Pick/Reject -->
   <div class="mb-3">
     <div class="text-xs text-zinc-500 mb-1">标记</div>
-    <FlagButtons bind:flag={flagValue} />
+    <FlagButtons flag={attributes?.flag ?? null} onchange={onflag} />
   </div>
 
   <!-- Tags -->

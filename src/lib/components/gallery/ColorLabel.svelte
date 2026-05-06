@@ -7,14 +7,17 @@
     { value: "purple", class: "bg-purple-500" },
   ];
 
-  let { value = $bindable(null as string | null) }: { value?: string | null } =
+  let {
+    value = null as string | null,
+    onchange,
+  }: { value?: string | null; onchange?: (v: string | null) => void } =
     $props();
 </script>
 
 <div class="flex items-center gap-1.5">
   {#each COLORS as c}
     <button
-      onclick={() => (value = value === c.value ? null : c.value)}
+      onclick={() => onchange?.(value === c.value ? null : c.value)}
       class="w-4 h-4 rounded-full {c.class} transition-opacity {value ===
       c.value
         ? 'ring-2 ring-white ring-offset-1 ring-offset-zinc-900 opacity-100'
@@ -24,7 +27,7 @@
   {/each}
   {#if value}
     <button
-      onclick={() => (value = null)}
+      onclick={() => onchange?.(null)}
       class="text-xs text-zinc-500 hover:text-zinc-300 ml-1">✕</button
     >
   {/if}

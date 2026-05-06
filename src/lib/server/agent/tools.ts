@@ -156,7 +156,7 @@ export const savePrompt = tool({
     model_type: z
       .string()
       .optional()
-      .describe("目标模型类型：ZIT/SDXL/SD1.5/FLUX"),
+      .describe("目标模型类型：ZIT/SDXL/SD1.5/FLUX/Illustrious/Anima"),
     tags: z.string().optional().describe("标签，逗号分隔"),
     rating: z.number().min(1).max(5).optional().describe("用户评分"),
     sampler: z.string().optional().describe("采样器"),
