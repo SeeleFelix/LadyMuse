@@ -13,14 +13,10 @@ interface ModuleConfig {
   enabled: boolean;
 }
 
-interface ToolConfig {
-  name: string;
-  enabled: boolean;
-}
-
 interface AgentConfig {
-  modules: ModuleConfig[];
-  tools: ToolConfig[];
+  shared_modules: ModuleConfig[];
+  model_modules: Record<string, ModuleConfig>;
+  tools: { name: string; enabled: boolean }[];
 }
 
 export const GET: RequestHandler = async () => {
@@ -32,8 +28,11 @@ export const PUT: RequestHandler = async ({ request }) => {
   const body = await request.json();
   const config: AgentConfig = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
 
-  if (body.modules) {
-    config.modules = body.modules;
+  if (body.shared_modules) {
+    config.shared_modules = body.shared_modules;
+  }
+  if (body.model_modules) {
+    config.model_modules = body.model_modules;
   }
   if (body.tools) {
     config.tools = body.tools;

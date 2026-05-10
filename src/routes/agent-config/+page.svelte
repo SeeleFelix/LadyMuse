@@ -9,7 +9,8 @@
     enabled: boolean;
   }
 
-  let modules = $state<ModuleConfig[]>([]);
+  let sharedModules = $state<ModuleConfig[]>([]);
+  let modelModules = $state<Record<string, ModuleConfig>>({});
   let tools = $state<ToolConfig[]>([]);
   let jbEnabled = $state(false);
   let jbPrompt = $state("");
@@ -30,7 +31,8 @@
       const res = await fetch("/api/agent-config");
       if (res.ok) {
         const config = await res.json();
-        modules = config.modules;
+        sharedModules = config.shared_modules;
+        modelModules = config.model_modules;
         tools = config.tools;
       }
       const cfgRes = await fetch("/api/config");
@@ -51,7 +53,11 @@
       const res = await fetch("/api/agent-config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modules, tools }),
+        body: JSON.stringify({
+          shared_modules: sharedModules,
+          model_modules: modelModules,
+          tools,
+        }),
       });
       await fetch("/api/config", {
         method: "POST",
@@ -73,8 +79,12 @@
     saving = false;
   }
 
-  function toggleModule(index: number) {
-    modules[index].enabled = !modules[index].enabled;
+  function toggleSharedModule(index: number) {
+    sharedModules[index].enabled = !sharedModules[index].enabled;
+  }
+
+  function toggleModelModule(key: string) {
+    modelModules[key].enabled = !modelModules[key].enabled;
   }
 
   function toggleTool(index: number) {
@@ -98,21 +108,58 @@
   {#if loading}
     <div class="py-12 text-center text-zinc-500">加载中...</div>
   {:else}
-    <!-- Prompt 模块 -->
+    <!-- 共享模块 -->
     <section class="mb-8">
-      <h2 class="mb-3 text-lg font-semibold text-zinc-200">Prompt 模块</h2>
+      <h2 class="mb-3 text-lg font-semibold text-zinc-200">共享 Prompt 模块</h2>
+      <p class="mb-3 text-xs text-zinc-500">所有目标模型都会加载的模块</p>
       <div
         class="overflow-hidden rounded-lg border border-zinc-800/60 bg-zinc-900/50"
       >
-        {#each modules as mod, i}
+        {#each sharedModules as mod, i}
           <button
-            onclick={() => toggleModule(i)}
+            onclick={() => toggleSharedModule(i)}
             class="flex w-full items-center justify-between px-4 py-3 transition-colors hover:bg-zinc-800/40 {i <
-            modules.length - 1
+            sharedModules.length - 1
               ? 'border-b border-zinc-800/40'
               : ''}"
           >
             <div class="flex items-center gap-3">
+              <span class="text-sm text-zinc-100">{mod.file}</span>
+            </div>
+            <span
+              class="rounded-md px-2.5 py-0.5 text-xs font-medium {mod.enabled
+                ? 'bg-emerald-500/15 text-emerald-400'
+                : 'bg-zinc-700/50 text-zinc-500'}"
+            >
+              {mod.enabled ? "启用" : "禁用"}
+            </span>
+          </button>
+        {/each}
+      </div>
+    </section>
+
+    <!-- 模型模块 -->
+    <section class="mb-8">
+      <h2 class="mb-3 text-lg font-semibold text-zinc-200">模型专用模块</h2>
+      <p class="mb-3 text-xs text-zinc-500">
+        按目标模型动态加载。禁用后该模型使用时不加载对应模块
+      </p>
+      <div
+        class="overflow-hidden rounded-lg border border-zinc-800/60 bg-zinc-900/50"
+      >
+        {#each Object.entries(modelModules) as [key, mod], i}
+          <button
+            onclick={() => toggleModelModule(key)}
+            class="flex w-full items-center justify-between px-4 py-3 transition-colors hover:bg-zinc-800/40 {i <
+            Object.entries(modelModules).length - 1
+              ? 'border-b border-zinc-800/40'
+              : ''}"
+          >
+            <div class="flex items-center gap-3">
+              <span
+                class="rounded bg-zinc-800 px-1.5 py-0.5 text-xs font-mono text-zinc-400"
+                >{key}</span
+              >
               <span class="text-sm text-zinc-100">{mod.file}</span>
             </div>
             <span

@@ -68,16 +68,12 @@
   let promptStyle = $state<"tags" | "hybrid" | "natural">("hybrid");
 
   const imageModelProfiles = [
-    { id: "zit", name: "Z Image Turbo", defaultStyle: "hybrid" as const },
-    { id: "sdxl", name: "SDXL", defaultStyle: "hybrid" as const },
-    { id: "sd15", name: "SD 1.5", defaultStyle: "tags" as const },
-    { id: "flux", name: "FLUX", defaultStyle: "natural" as const },
+    { id: "zit", name: "Z Image Turbo", defaultStyle: "natural" as const },
     {
       id: "illustrious",
       name: "Illustrious XL",
       defaultStyle: "tags" as const,
     },
-    { id: "anima", name: "Anima", defaultStyle: "tags" as const },
   ];
 
   const providers = [
