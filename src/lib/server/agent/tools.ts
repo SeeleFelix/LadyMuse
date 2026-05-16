@@ -275,6 +275,58 @@ export const saveSessionSummary = tool({
   },
 });
 
+type PendingTool = {
+  resolve: (choice: string) => void;
+  reject: (e: Error) => void;
+  question: string;
+  options: string[];
+};
+
+const pendingToolCalls = new Map<string, PendingTool>();
+
+export function resolveToolCall(toolCallId: string, choice: string): boolean {
+  const pending = pendingToolCalls.get(toolCallId);
+  if (!pending) return false;
+  pending.resolve(choice);
+  pendingToolCalls.delete(toolCallId);
+  return true;
+}
+
+export const presentOptions = tool({
+  description:
+    "向用户展示一组可点击的选项。在创作对话的每一步——感受方向、光线选择、构图决策、反转对比——只要需要用户从几个方向中选一个，就必须调用此工具。每次选项 2-4 个，每个用'字母|画面描述'格式，描述要具体有画面感。绝不能用纯文本写选项让用户手打。",
+  inputSchema: z.object({
+    question: z
+      .string()
+      .describe("问用户的问题，如'哪种光更接近你想要的感觉？'"),
+    options: z
+      .array(z.string())
+      .describe(
+        "选项列表，每个用'字母|描述'格式，如'A|惨白的荧光灯，无处躲藏'. 2-4个选项",
+      ),
+  }),
+  execute: async ({ question, options }, { toolCallId }) => {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        pendingToolCalls.delete(toolCallId);
+        reject(new Error("用户超时未选择"));
+      }, 300_000); // 5 min
+      pendingToolCalls.set(toolCallId, {
+        resolve: (v: string) => {
+          clearTimeout(timeout);
+          resolve({ question, options, choice: v });
+        },
+        reject: (e: Error) => {
+          clearTimeout(timeout);
+          reject(e);
+        },
+        question,
+        options,
+      });
+    });
+  },
+});
+
 export const searchCivitaiModels = tool({
   description:
     "从 Civitai 搜索 AI 图像模型。查找 Checkpoint、LoRA 等模型及其描述、标签、下载量。当用户想了解某个风格或主题有哪些可用模型时使用。",
@@ -470,6 +522,7 @@ const allToolDefinitions = {
   get_user_profile: getUserProfile,
   update_user_profile: updateUserProfile,
   save_session_summary: saveSessionSummary,
+  present_options: presentOptions,
   search_civitai_models: searchCivitaiModels,
   search_civitai_prompts: searchCivitaiPrompts,
   search_civitai_tags: searchCivitaiTags,
@@ -482,17 +535,21 @@ interface ToolConfig {
   enabled: boolean;
 }
 
-function loadEnabledTools(): Record<
-  string,
-  (typeof allToolDefinitions)[keyof typeof allToolDefinitions]
+async function loadEnabledTools(): Promise<
+  Record<string, (typeof allToolDefinitions)[keyof typeof allToolDefinitions]>
 > {
-  const configPath = join(import.meta.dirname, "prompts", "modules.json");
-  const config: { tools: ToolConfig[] } = JSON.parse(
-    readFileSync(configPath, "utf-8"),
-  );
-  const enabled = new Set(
-    config.tools.filter((t) => t.enabled).map((t) => t.name),
-  );
+  const toolsJson = await getConfig("agent_tools");
+  let tools: ToolConfig[];
+  if (toolsJson) {
+    tools = JSON.parse(toolsJson);
+  } else {
+    const configPath = join(import.meta.dirname, "prompts", "modules.json");
+    const config: { tools: ToolConfig[] } = JSON.parse(
+      readFileSync(configPath, "utf-8"),
+    );
+    tools = config.tools;
+  }
+  const enabled = new Set(tools.filter((t) => t.enabled).map((t) => t.name));
   const result: Record<
     string,
     (typeof allToolDefinitions)[keyof typeof allToolDefinitions]
@@ -503,9 +560,8 @@ function loadEnabledTools(): Record<
   return result;
 }
 
-export function getEnabledTools(): Record<
-  string,
-  (typeof allToolDefinitions)[keyof typeof allToolDefinitions]
+export async function getEnabledTools(): Promise<
+  Record<string, (typeof allToolDefinitions)[keyof typeof allToolDefinitions]>
 > {
   return loadEnabledTools();
 }

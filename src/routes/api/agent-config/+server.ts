@@ -1,43 +1,42 @@
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync } from "fs";
 import { join } from "path";
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
+import { getConfig, setConfig } from "$lib/server/config";
 
-const CONFIG_PATH = join(
+const DEFAULT_PATH = join(
   process.cwd(),
   "src/lib/server/agent/prompts/modules.json",
 );
 
-interface ModuleConfig {
-  file: string;
-  enabled: boolean;
-}
-
-interface AgentConfig {
-  shared_modules: ModuleConfig[];
-  model_modules: Record<string, ModuleConfig>;
-  tools: { name: string; enabled: boolean }[];
+function readDefaults() {
+  return JSON.parse(readFileSync(DEFAULT_PATH, "utf-8"));
 }
 
 export const GET: RequestHandler = async () => {
-  const config: AgentConfig = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
-  return json(config);
+  const defaults = readDefaults();
+
+  const modulesJson = await getConfig("agent_modules");
+  const toolsJson = await getConfig("agent_tools");
+
+  return json({
+    shared_modules: modulesJson
+      ? JSON.parse(modulesJson)
+      : defaults.shared_modules,
+    model_modules: defaults.model_modules,
+    tools: toolsJson ? JSON.parse(toolsJson) : defaults.tools,
+  });
 };
 
 export const PUT: RequestHandler = async ({ request }) => {
   const body = await request.json();
-  const config: AgentConfig = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
 
   if (body.shared_modules) {
-    config.shared_modules = body.shared_modules;
-  }
-  if (body.model_modules) {
-    config.model_modules = body.model_modules;
+    await setConfig("agent_modules", JSON.stringify(body.shared_modules));
   }
   if (body.tools) {
-    config.tools = body.tools;
+    await setConfig("agent_tools", JSON.stringify(body.tools));
   }
 
-  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n");
   return json({ ok: true });
 };

@@ -115,7 +115,7 @@ export async function* chatStream(
     model,
     system: systemPrompt,
     messages: formattedMessages,
-    tools: getEnabledTools(),
+    tools: await getEnabledTools(),
     stopWhen: stepCountIs(10),
     ...(deepseekProvider && {
       providerOptions: {
@@ -156,6 +156,7 @@ export async function* chatStream(
         yield JSON.stringify({
           type: "tool-call",
           name: event.toolName,
+          toolCallId: event.toolCallId,
           input: event.input,
         }) + "\n";
       } else if (event.type === "tool-result") {
