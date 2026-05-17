@@ -49,5 +49,6 @@ export const GET: RequestHandler = async ({ params }) => {
     nlUsage: c.nlUsage,
     relatedConcepts: relatedDetails,
     source: c.source,
+    hasEmbedding: c.embedding ? 1 : 0,
   });
 };

@@ -46,6 +46,7 @@ export const GET: RequestHandler = async ({ url }) => {
         category: c.category,
         subCategory: c.subCategory,
         snippet: (c.visualDescription || "").slice(0, 150),
+        hasEmbedding: c.embedding ? 1 : 0,
         score: cosineSimilarity(queryEmbedding, JSON.parse(c.embedding!)),
       }))
       .sort((a, b) => b.score - a.score)
@@ -83,6 +84,7 @@ export const GET: RequestHandler = async ({ url }) => {
       subCategory: artConcepts.subCategory,
       visualDescription: artConcepts.visualDescription,
       tags: artConcepts.tags,
+      embedding: artConcepts.embedding,
     })
     .from(artConcepts);
 
@@ -110,6 +112,7 @@ export const GET: RequestHandler = async ({ url }) => {
         subCategory: r.subCategory,
         snippet: (r.visualDescription || "").slice(0, 150),
         tags: r.tags ? JSON.parse(r.tags) : [],
+        hasEmbedding: r.embedding ? 1 : 0,
       })),
     })),
   );

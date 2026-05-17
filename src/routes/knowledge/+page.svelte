@@ -9,6 +9,7 @@
     snippet: string;
     tags: string[];
     score?: number;
+    hasEmbedding?: number;
   }
 
   interface ConceptDetail {
@@ -23,6 +24,7 @@
     nlUsage: string | null;
     relatedConcepts: { name: string; nameZh: string | null }[];
     source: string;
+    hasEmbedding?: number;
   }
 
   interface SyncStatus {
@@ -67,11 +69,18 @@
     lastSync: null,
   });
 
+  let embedStatus = $state<{
+    total: number;
+    embedded: number;
+    missing: number;
+  } | null>(null);
+
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let sse: EventSource | null = null;
 
   onMount(() => {
     loadSyncStatus();
+    loadEmbedStatus();
     loadConcepts();
     connectSSE();
     // Polling fallback every 2s
@@ -141,6 +150,19 @@
     location.reload();
   }
 
+  async function loadEmbedStatus() {
+    const res = await fetch("/api/knowledge/embed/status");
+    if (res.ok) embedStatus = await res.json();
+  }
+
+  async function triggerEmbed(dimension?: string, name?: string) {
+    await fetch("/api/knowledge/embed", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dimension, name }),
+    });
+  }
+
   function copyText(text: string) {
     navigator.clipboard.writeText(text);
     copied = true;
@@ -177,6 +199,12 @@
       disabled={syncStatus.running}
       class="rounded bg-red-900/30 px-3 py-1 text-xs text-red-400 hover:bg-red-900/50 disabled:opacity-50"
       >清空数据</button
+    >
+    <button
+      onclick={() => triggerEmbed()}
+      disabled={syncStatus.running}
+      class="rounded bg-emerald-900/30 px-3 py-1 text-xs text-emerald-400 hover:bg-emerald-900/50 disabled:opacity-50"
+      >生成向量</button
     >
   </div>
 
@@ -216,6 +244,15 @@
           : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}"
         >全部维度</button
       >
+
+      {#if selectedDim}
+        <button
+          onclick={() => triggerEmbed(selectedDim)}
+          disabled={syncStatus.running}
+          class="block w-full rounded px-2.5 py-1 text-left text-xs text-emerald-400 hover:bg-zinc-800 mt-1"
+          >生成本维度向量</button
+        >
+      {/if}
 
       {#each DIMENSIONS as dim}
         <button
@@ -267,7 +304,15 @@
                     ? 'bg-violet-600/20 text-violet-300'
                     : 'text-zinc-300 hover:bg-zinc-800 hover:text-zinc-200'}"
                 >
-                  <div>{c.nameZh || c.name}</div>
+                  <div>
+                    {c.nameZh || c.name}
+                    <span
+                      class="ml-1 inline-block w-1.5 h-1.5 rounded-full {c.hasEmbedding
+                        ? 'bg-emerald-500'
+                        : 'bg-zinc-600'}"
+                      title={c.hasEmbedding ? "已有向量" : "缺少向量"}
+                    ></span>
+                  </div>
                   {#if c.score != null}
                     <div class="text-zinc-600">
                       {Math.round(c.score * 100)}%
@@ -299,6 +344,14 @@
                 class="rounded bg-violet-600/20 px-2 py-0.5 text-xs text-violet-400"
                 >{selectedConcept.source}</span
               >
+              {#if selectedConcept && !selectedConcept.hasEmbedding}
+                <button
+                  onclick={() => triggerEmbed(undefined, selectedConcept!.name)}
+                  disabled={syncStatus.running}
+                  class="rounded bg-emerald-900/30 px-2 py-0.5 text-xs text-emerald-400 hover:bg-emerald-900/50 disabled:opacity-50"
+                  >生成向量</button
+                >
+              {/if}
             </div>
 
             {#if selectedConcept.visualDescription}
