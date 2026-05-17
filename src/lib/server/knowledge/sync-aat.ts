@@ -52,6 +52,12 @@ function extractSubject(line: string): string | null {
   return line.slice(1, end);
 }
 
+function decodeNt(text: string): string {
+  return text.replace(/\\u([\da-fA-F]{4})/g, (_, h) =>
+    String.fromCharCode(parseInt(h, 16)),
+  );
+}
+
 function extractObject(line: string): { text: string; isUri: boolean } | null {
   // Find the object part — starts after the second ">"
   let gtCount = 0;
@@ -75,7 +81,7 @@ function extractObject(line: string): { text: string; isUri: boolean } | null {
   if (firstQuote === -1) return null;
   const lastQuote = raw.lastIndexOf('"');
   if (lastQuote <= firstQuote) return null;
-  return { text: raw.slice(firstQuote + 1, lastQuote), isUri: false };
+  return { text: decodeNt(raw.slice(firstQuote + 1, lastQuote)), isUri: false };
 }
 
 function findLatestZip(): string | null {
