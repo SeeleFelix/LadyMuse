@@ -88,7 +88,7 @@ export const PUT: RequestHandler = async ({ request }) => {
       .select({ count: sql`count(*)` })
       .from(promptVersions)
       .where(eq(promptVersions.promptId, id));
-    const nextVersion = (versionCount[0]?.count ?? 0) + 1;
+    const nextVersion = Number(versionCount[0]?.count ?? 0) + 1;
 
     await db.insert(promptVersions).values({
       promptId: id,

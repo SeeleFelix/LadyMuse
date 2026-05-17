@@ -1,5 +1,11 @@
 import { spawn } from "child_process";
-import { createWriteStream, unlinkSync, existsSync } from "fs";
+import {
+  createWriteStream,
+  existsSync,
+  readdirSync,
+  statSync,
+  mkdirSync,
+} from "fs";
 import { createInterface } from "readline";
 import { db } from "../db";
 import { artConcepts } from "../db/schema";
@@ -8,7 +14,7 @@ import { generateEmbeddings } from "./embedding";
 import { startSync, updateProgress, finishSync, failSync } from "./sync-status";
 
 const AAT_FULL_URL = "http://aatdownloads.getty.edu/VocabData/full.zip";
-const ZIP_FILE = "/tmp/aat_full.zip";
+const DATA_DIR = "data/aat";
 const NT_FILE = "AATOut_Full.nt";
 
 // AAT RDF predicates
@@ -54,17 +60,42 @@ function parseTriple(line: string): Triple | null {
   return { s, p, o: `${text}\0${lang}`, oType: "literal" };
 }
 
-async function downloadZip(): Promise<void> {
-  if (existsSync(ZIP_FILE)) {
-    console.log("[sync-aat] Using cached ZIP at", ZIP_FILE);
-    return;
+function findLatestZip(): string | null {
+  if (!existsSync(DATA_DIR)) return null;
+  const files = readdirSync(DATA_DIR).filter(
+    (f) => f.startsWith("aat_full_") && f.endsWith(".zip"),
+  );
+  if (files.length === 0) return null;
+  files.sort().reverse();
+  return files[0];
+}
+
+async function downloadZip(): Promise<string> {
+  const existing = findLatestZip();
+  if (existing) {
+    const fullPath = `${DATA_DIR}/${existing}`;
+    const age = Date.now() - statSync(fullPath).mtimeMs;
+    if (age < 30 * 24 * 60 * 60 * 1000) {
+      console.log("[sync-aat] Using cached", fullPath);
+      return fullPath;
+    }
+  }
+
+  mkdirSync(DATA_DIR, { recursive: true });
+
+  const dateStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const zipPath = `${DATA_DIR}/aat_full_${dateStr}.zip`;
+
+  if (existsSync(zipPath)) {
+    console.log("[sync-aat] Using cached", zipPath);
+    return zipPath;
   }
 
   console.log("[sync-aat] Downloading AAT ZIP...");
   const res = await fetch(AAT_FULL_URL);
   if (!res.ok) throw new Error(`Download failed: ${res.status}`);
 
-  const fileStream = createWriteStream(ZIP_FILE);
+  const fileStream = createWriteStream(zipPath);
   const reader = res.body!.getReader();
   while (true) {
     const { done, value } = await reader.read();
@@ -72,32 +103,40 @@ async function downloadZip(): Promise<void> {
     fileStream.write(Buffer.from(value));
   }
   fileStream.end();
-  console.log("[sync-aat] Downloaded to", ZIP_FILE);
+  console.log("[sync-aat] Downloaded to", zipPath);
+  return zipPath;
 }
 
-function streamNtriples(): Promise<{
+function streamNtriples(zipPath: string): Promise<{
   concepts: Map<string, ConceptRecord>;
   scopeNotes: Map<string, string>;
 }> {
   return new Promise((resolve, reject) => {
     const concepts = new Map<string, ConceptRecord>();
     const scopeNotes = new Map<string, string>();
+    const aatUris = new Set<string>(); // confirmed AAT concept URIs
+    const pendingLabels = new Map<string, Map<string, string>>();
+    const pendingScopeNotes = new Map<string, string[]>();
+    const pendingBroader = new Map<string, string[]>();
     let lineCount = 0;
 
-    const getOrCreate = (uri: string): ConceptRecord => {
-      if (!concepts.has(uri)) {
-        concepts.set(uri, {
-          uri,
-          labels: new Map(),
-          scopeNoteUris: [],
-          broaderUris: [],
-          isAatConcept: false,
-        });
-      }
-      return concepts.get(uri)!;
+    const flushPending = (uri: string) => {
+      const labels = pendingLabels.get(uri);
+      const snUris = pendingScopeNotes.get(uri) || [];
+      const broaderUris = pendingBroader.get(uri) || [];
+      concepts.set(uri, {
+        uri,
+        labels: labels || new Map(),
+        scopeNoteUris: snUris,
+        broaderUris,
+        isAatConcept: true,
+      });
+      pendingLabels.delete(uri);
+      pendingScopeNotes.delete(uri);
+      pendingBroader.delete(uri);
     };
 
-    const unzip = spawn("unzip", ["-p", ZIP_FILE, NT_FILE], {
+    const unzip = spawn("unzip", ["-p", zipPath, NT_FILE], {
       stdio: ["ignore", "pipe", "ignore"],
     });
 
@@ -108,34 +147,57 @@ function streamNtriples(): Promise<{
       const t = parseTriple(line);
       if (!t) return;
 
-      if (t.p === RDF_TYPE) {
-        if (t.o === GVP_CONCEPT) {
-          getOrCreate(t.s).isAatConcept = true;
+      // Identify AAT concepts: gvp:Concept type OR inScheme aat:
+      if (t.p === RDF_TYPE && t.o === GVP_CONCEPT) {
+        aatUris.add(t.s);
+        flushPending(t.s);
+        return;
+      }
+      if (t.p === SKOS_IN_SCHEME && t.o === AAT_SCHEME) {
+        aatUris.add(t.s);
+        flushPending(t.s);
+        return;
+      }
+
+      // Only store data for confirmed AAT concept URIs
+      if (aatUris.has(t.s)) {
+        const rec = concepts.get(t.s)!;
+
+        if (t.p === RDFS_LABEL && t.oType === "literal") {
+          const [text, lang] = t.o.split("\0");
+          rec.labels.set(lang, text);
+          return;
+        }
+        if (t.p === SKOS_SCOPE_NOTE && t.oType === "uri") {
+          rec.scopeNoteUris.push(t.o);
+          return;
+        }
+        if (t.p === GVP_BROADER_PREFERRED && t.oType === "uri") {
+          rec.broaderUris.push(t.o);
+          return;
         }
         return;
       }
 
-      if (t.p === SKOS_IN_SCHEME && t.o === AAT_SCHEME) {
-        getOrCreate(t.s).isAatConcept = true;
-        return;
-      }
-
+      // Buffer data for URIs that might be concepts (not yet confirmed)
       if (t.p === RDFS_LABEL && t.oType === "literal") {
         const [text, lang] = t.o.split("\0");
-        getOrCreate(t.s).labels.set(lang, text);
+        if (!pendingLabels.has(t.s)) pendingLabels.set(t.s, new Map());
+        pendingLabels.get(t.s)!.set(lang, text);
         return;
       }
-
       if (t.p === SKOS_SCOPE_NOTE && t.oType === "uri") {
-        getOrCreate(t.s).scopeNoteUris.push(t.o);
+        if (!pendingScopeNotes.has(t.s)) pendingScopeNotes.set(t.s, []);
+        pendingScopeNotes.get(t.s)!.push(t.o);
         return;
       }
-
       if (t.p === GVP_BROADER_PREFERRED && t.oType === "uri") {
-        getOrCreate(t.s).broaderUris.push(t.o);
+        if (!pendingBroader.has(t.s)) pendingBroader.set(t.s, []);
+        pendingBroader.get(t.s)!.push(t.o);
         return;
       }
 
+      // Scope note text (always collect, they're small)
       if (
         t.p === RDF_VALUE &&
         t.oType === "literal" &&
@@ -146,18 +208,22 @@ function streamNtriples(): Promise<{
         return;
       }
 
-      // Progress every 1M lines
+      // Progress
       if (lineCount % 1_000_000 === 0) {
         console.log(
-          `[sync-aat] Parsed ${lineCount} lines, ${concepts.size} subjects`,
+          `[sync-aat] Parsed ${lineCount} lines, ${aatUris.size} concepts`,
         );
         updateProgress({ done: lineCount });
       }
     });
 
     rl.on("close", () => {
+      // Flush any remaining pending data for confirmed concepts
+      for (const uri of aatUris) {
+        if (!concepts.has(uri)) flushPending(uri);
+      }
       console.log(
-        `[sync-aat] Parse complete: ${lineCount} lines, ${concepts.size} subjects, ${scopeNotes.size} scope notes`,
+        `[sync-aat] Parse complete: ${lineCount} lines, ${concepts.size} concepts, ${scopeNotes.size} scope notes`,
       );
       resolve({ concepts, scopeNotes });
     });
@@ -236,10 +302,10 @@ export async function syncAat(): Promise<{
 
   try {
     updateProgress({ stage: "downloading" });
-    await downloadZip();
+    const zipPath = await downloadZip();
 
     updateProgress({ stage: "parsing" });
-    const { concepts, scopeNotes } = await streamNtriples();
+    const { concepts, scopeNotes } = await streamNtriples(zipPath);
 
     // Filter to only AAT concepts (gvp:Concept + inScheme aat:)
     const aatConcepts = new Map(
