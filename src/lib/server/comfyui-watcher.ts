@@ -1,5 +1,6 @@
 import { watch, type FSWatcher } from "node:fs";
-import { extname } from "node:path";
+import { existsSync } from "node:fs";
+import { extname, join } from "node:path";
 import { getOutputDir, clearCache } from "./comfyui-browser";
 
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
@@ -26,6 +27,8 @@ async function startWatcher() {
   try {
     watcher = watch(outputDir, { recursive: true }, (_event, filename) => {
       if (!filename || !isImageFile(filename)) return;
+      // Only notify on new files, skip deletions
+      if (!existsSync(join(outputDir, filename))) return;
       pendingFiles.add(filename);
 
       if (debounceTimer) clearTimeout(debounceTimer);
