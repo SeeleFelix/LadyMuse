@@ -50,53 +50,20 @@
     }
   },
   "tools": [
-    {
-      "name": "knowledge_search",
-      "enabled": false
-    },
-    {
-      "name": "search_my_prompts",
-      "enabled": true
-    },
-    {
-      "name": "save_prompt",
-      "enabled": true
-    },
-    {
-      "name": "get_user_profile",
-      "enabled": true
-    },
-    {
-      "name": "update_user_profile",
-      "enabled": true
-    },
-    {
-      "name": "save_session_summary",
-      "enabled": false
-    },
-    {
-      "name": "search_civitai_models",
-      "enabled": false
-    },
-    {
-      "name": "search_civitai_prompts",
-      "enabled": true
-    },
-    {
-      "name": "search_civitai_tags",
-      "enabled": false
-    },
-    {
-      "name": "discover_visual_concepts",
-      "enabled": false
-    },
-    {
-      "name": "web_search",
-      "enabled": true
-    },
-    {
-      "name": "present_options",
-      "enabled": true
-    }
+    { "name": "explore_dimension", "enabled": true },
+    { "name": "get_concept", "enabled": true },
+    { "name": "find_concepts", "enabled": true },
+    { "name": "find_patterns", "enabled": true },
+    { "name": "find_references", "enabled": true },
+    { "name": "search_my_prompts", "enabled": true },
+    { "name": "save_prompt", "enabled": true },
+    { "name": "get_user_profile", "enabled": true },
+    { "name": "update_user_profile", "enabled": true },
+    { "name": "save_session_summary", "enabled": false },
+    { "name": "search_civitai_models", "enabled": false },
+    { "name": "search_civitai_prompts", "enabled": true },
+    { "name": "search_civitai_tags", "enabled": false },
+    { "name": "web_search", "enabled": true },
+    { "name": "present_options", "enabled": true }
   ]
 }
