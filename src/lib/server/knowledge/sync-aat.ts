@@ -21,16 +21,20 @@ const AAT_FULL_URL = "http://aatdownloads.getty.edu/VocabData/full.zip";
 const DATA_DIR = "data/aat";
 const NT_FILE = "AATOut_Full.nt";
 
-// AAT RDF predicates
+// RDF predicates
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label";
 const SKOS_IN_SCHEME = "http://www.w3.org/2004/02/skos/core#inScheme";
 const SKOS_SCOPE_NOTE = "http://www.w3.org/2004/02/skos/core#scopeNote";
+const SKOS_RELATED = "http://www.w3.org/2004/02/skos/core#related";
 const RDF_VALUE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#value";
 const GVP_BROADER_PREFERRED =
   "http://vocab.getty.edu/ontology#broaderPreferredExtended";
 const AAT_SCHEME = "http://vocab.getty.edu/aat/";
 const GVP_CONCEPT = "http://vocab.getty.edu/ontology#Concept";
+
+// Concept URI pattern: http://vocab.getty.edu/aat/3\d{8}
+const CONCEPT_URI_RE = /\/aat\/3\d{8}$/;
 
 interface Triple {
   s: string;
@@ -39,12 +43,12 @@ interface Triple {
   oType: "uri" | "literal";
 }
 
-interface ConceptRecord {
-  uri: string;
-  labels: Map<string, string>; // lang -> text
+interface ConceptData {
+  labels: Map<string, string>;
   scopeNoteUris: string[];
   broaderUris: string[];
-  isAatConcept: boolean;
+  relatedUris: string[];
+  isConcept: boolean;
 }
 
 function parseTriple(line: string): Triple | null {
@@ -56,7 +60,6 @@ function parseTriple(line: string): Triple | null {
   if (o.startsWith("<")) {
     return { s, p, o: o.slice(1, -1), oType: "uri" };
   }
-  // Literal: extract text and optional language tag
   const litMatch = o.match(/^"(.*)"(?:@(\w[\w-]*))?$/);
   if (!litMatch) return null;
   const text = litMatch[1].replace(/\\"/g, '"').replace(/\\n/g, "\n");
@@ -89,16 +92,13 @@ async function downloadZip(): Promise<string> {
   }
 
   mkdirSync(DATA_DIR, { recursive: true });
-
-  const dateStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const dateStr = new Date().toISOString().slice(0, 10);
   const zipPath = `${DATA_DIR}/aat_full_${dateStr}.zip`;
 
   if (existsSync(zipPath) && statSync(zipPath).size > 0) {
     console.log("[sync-aat] Using cached", zipPath);
     return zipPath;
   }
-
-  // Remove empty/partial file from previous failed attempt
   if (existsSync(zipPath) && statSync(zipPath).size === 0) {
     unlinkSync(zipPath);
   }
@@ -124,56 +124,41 @@ async function downloadZip(): Promise<string> {
   return zipPath;
 }
 
-async function collectAatUris(ntPath: string): Promise<Set<string>> {
-  return new Promise((resolve, reject) => {
-    const uris = new Set<string>();
-    let lineCount = 0;
-    const rl = createInterface({ input: createReadStream(ntPath) });
-
-    rl.on("line", (line: string) => {
-      lineCount++;
-      const t = parseTriple(line);
-      if (!t) return;
-      if (
-        (t.p === RDF_TYPE && t.o === GVP_CONCEPT) ||
-        (t.p === SKOS_IN_SCHEME && t.o === AAT_SCHEME)
-      ) {
-        uris.add(t.s);
-      }
-      if (lineCount % 1_000_000 === 0) {
-        console.log(`[sync-aat] Pass 1: ${lineCount} lines, ${uris.size} URIs`);
-        updateProgress({ done: lineCount });
-      }
-    });
-
-    rl.on("close", () => {
-      console.log(`[sync-aat] Pass 1 complete: ${uris.size} AAT concept URIs`);
-      resolve(uris);
-    });
-    rl.on("error", reject);
+function extractNt(zipPath: string): string {
+  const ntPath = zipPath.replace(".zip", ".nt");
+  if (existsSync(ntPath) && statSync(ntPath).size > 0) {
+    console.log("[sync-aat] Using cached NT at", ntPath);
+    return ntPath;
+  }
+  console.log("[sync-aat] Extracting to", ntPath);
+  execSync(`unzip -o "${zipPath}" "${NT_FILE}" -d "${DATA_DIR}"`, {
+    stdio: "inherit",
   });
+  const extracted = `${DATA_DIR}/${NT_FILE}`;
+  if (extracted !== ntPath) {
+    if (existsSync(ntPath)) unlinkSync(ntPath);
+    renameSync(extracted, ntPath);
+  }
+  return ntPath;
 }
 
-function buildConceptData(
-  ntPath: string,
-  aatUris: Set<string>,
-): Promise<{
-  concepts: Map<string, ConceptRecord>;
-  scopeNotes: Map<string, string>;
+function parseNtFile(ntPath: string): Promise<{
+  concepts: Map<string, ConceptData>;
+  scopeNoteTexts: Map<string, string>;
 }> {
   return new Promise((resolve, reject) => {
-    const concepts = new Map<string, ConceptRecord>();
-    const scopeNotes = new Map<string, string>();
+    const concepts = new Map<string, ConceptData>();
+    const scopeNoteTexts = new Map<string, string>();
     let lineCount = 0;
 
-    const getOrCreate = (uri: string): ConceptRecord => {
+    const getOrCreate = (uri: string): ConceptData => {
       if (!concepts.has(uri)) {
         concepts.set(uri, {
-          uri,
           labels: new Map(),
           scopeNoteUris: [],
           broaderUris: [],
-          isAatConcept: true,
+          relatedUris: [],
+          isConcept: false,
         });
       }
       return concepts.get(uri)!;
@@ -186,44 +171,48 @@ function buildConceptData(
       const t = parseTriple(line);
       if (!t) return;
 
-      // Scope note text (collect regardless of subject)
+      // Scope note text — always collect (they're small, tens of thousands)
       if (
         t.p === RDF_VALUE &&
         t.oType === "literal" &&
         t.s.includes("scopeNote")
       ) {
         const [text] = t.o.split("\0");
-        scopeNotes.set(t.s, text);
+        scopeNoteTexts.set(t.s, text);
         return;
       }
 
-      // Only process triples about AAT concepts
-      if (!aatUris.has(t.s)) return;
+      // Only process concept URIs: http://vocab.getty.edu/aat/3\d{8}
+      if (!CONCEPT_URI_RE.test(t.s)) return;
 
       const rec = getOrCreate(t.s);
 
-      if (t.p === RDFS_LABEL && t.oType === "literal") {
+      if (t.p === RDF_TYPE && t.o === GVP_CONCEPT) {
+        rec.isConcept = true;
+      } else if (t.p === SKOS_IN_SCHEME && t.o === AAT_SCHEME) {
+        rec.isConcept = true;
+      } else if (t.p === RDFS_LABEL && t.oType === "literal") {
         const [text, lang] = t.o.split("\0");
         rec.labels.set(lang, text);
       } else if (t.p === SKOS_SCOPE_NOTE && t.oType === "uri") {
         rec.scopeNoteUris.push(t.o);
       } else if (t.p === GVP_BROADER_PREFERRED && t.oType === "uri") {
         rec.broaderUris.push(t.o);
+      } else if (t.p === SKOS_RELATED && t.oType === "uri") {
+        rec.relatedUris.push(t.o);
       }
 
       if (lineCount % 1_000_000 === 0) {
-        console.log(
-          `[sync-aat] Pass 2: ${lineCount} lines, ${concepts.size} concepts`,
-        );
+        console.log(`[sync-aat] ${lineCount} lines, ${concepts.size} concepts`);
         updateProgress({ done: lineCount });
       }
     });
 
     rl.on("close", () => {
       console.log(
-        `[sync-aat] Pass 2 complete: ${concepts.size} concepts, ${scopeNotes.size} scope notes`,
+        `[sync-aat] Parse complete: ${lineCount} lines, ${concepts.size} concepts (${[...concepts.values()].filter((c) => c.isConcept).length} confirmed), ${scopeNoteTexts.size} scope notes`,
       );
-      resolve({ concepts, scopeNotes });
+      resolve({ concepts, scopeNoteTexts });
     });
     rl.on("error", reject);
   });
@@ -231,106 +220,81 @@ function buildConceptData(
 
 function buildHierarchyPath(
   uri: string,
-  concepts: Map<string, ConceptRecord>,
-): string[] {
-  const path: string[] = [];
+  concepts: Map<string, ConceptData>,
+): string {
+  const parts: string[] = [];
   const visited = new Set<string>();
   let current = uri;
-
   while (current && !visited.has(current)) {
     visited.add(current);
     const rec = concepts.get(current);
     if (!rec) break;
-
-    // Use English label, fallback to first available
     const label = rec.labels.get("en") || rec.labels.values().next().value;
-    if (label) path.unshift(label);
-
+    if (label) parts.unshift(label);
     current = rec.broaderUris[0] || "";
   }
-
-  return path;
+  return parts.join(" > ");
 }
 
-function mapToDimension(hierarchyPath: string): string {
-  // Check if hierarchy path contains any of our dimension keywords
-  const lowerPath = hierarchyPath.toLowerCase();
-
-  if (lowerPath.includes("light") || lowerPath.includes("lumière"))
-    return "lighting";
-  if (lowerPath.includes("composit") || lowerPath.includes("perspective"))
-    return "composition";
-  if (lowerPath.includes("color") || lowerPath.includes("couleur"))
-    return "color";
-  if (lowerPath.includes("texture")) return "texture";
+function mapToDimension(path: string): string {
+  const p = path.toLowerCase();
+  if (p.includes("light")) return "lighting";
+  if (p.includes("composit") || p.includes("perspective")) return "composition";
+  if (p.includes("color") || p.includes("couleur")) return "color";
+  if (p.includes("texture")) return "texture";
   if (
-    lowerPath.includes("built environment") ||
-    lowerPath.includes("settlement") ||
-    lowerPath.includes("landscape") ||
-    lowerPath.includes("architecture")
+    p.includes("built environment") ||
+    p.includes("settlement") ||
+    p.includes("landscape") ||
+    p.includes("architecture")
   )
     return "setting";
-  if (lowerPath.includes("styles and periods") || lowerPath.includes("style"))
-    return "style";
+  if (p.includes("styles and periods") || p.includes("style")) return "style";
   if (
-    lowerPath.includes("processes and techniques") ||
-    lowerPath.includes("technique") ||
-    lowerPath.includes("activity")
+    p.includes("processes and techniques") ||
+    p.includes("technique") ||
+    p.includes("activity")
   )
     return "technical";
-
   return "other";
 }
 
-function extractSubCategory(hierarchyPath: string): string {
-  const parts = hierarchyPath.split(" > ");
-  // Return the last meaningful part
-  return parts[parts.length - 1] || parts[0] || "";
+function subCategory(path: string): string {
+  const parts = path.split(" > ");
+  return parts[parts.length - 1] || "";
+}
+
+function resolveConceptName(
+  uri: string,
+  concepts: Map<string, ConceptData>,
+): string | null {
+  const rec = concepts.get(uri);
+  if (!rec) return null;
+  return rec.labels.get("en") || rec.labels.values().next().value || null;
 }
 
 export async function syncAat(): Promise<{
   inserted: number;
   updated: number;
 }> {
-  if (!startSync("aat")) {
-    throw new Error("Sync already in progress");
-  }
+  if (!startSync("aat")) throw new Error("Sync already in progress");
 
   try {
     updateProgress({ stage: "downloading" });
     const zipPath = await downloadZip();
 
-    // Extract to disk
-    const ntPath = zipPath.replace(".zip", ".nt");
-    if (!existsSync(ntPath) || statSync(ntPath).size === 0) {
-      console.log("[sync-aat] Extracting to", ntPath);
-      execSync(`unzip -o "${zipPath}" "${NT_FILE}" -d "${DATA_DIR}"`, {
-        stdio: "inherit",
-      });
-      // unzip extracts to DATA_DIR/NT_FILE, move if needed
-      const extracted = `${DATA_DIR}/${NT_FILE}`;
-      if (extracted !== ntPath) {
-        renameSync(extracted, ntPath);
-      }
-    } else {
-      console.log("[sync-aat] Using cached", ntPath);
-    }
-
-    // Pass 1: collect AAT concept URIs
     updateProgress({ stage: "parsing" });
-    const aatUris = await collectAatUris(ntPath);
+    const ntPath = extractNt(zipPath);
+    const { concepts, scopeNoteTexts } = await parseNtFile(ntPath);
 
-    // Pass 2: build concept data for those URIs only
-    updateProgress({ stage: "parsing", done: 0 });
-    const { concepts, scopeNotes } = await buildConceptData(ntPath, aatUris);
-
-    // Filter to only AAT concepts (gvp:Concept + inScheme aat:)
+    // Filter to confirmed AAT concepts only
     const aatConcepts = new Map(
-      [...concepts.entries()].filter(([_, c]) => c.isAatConcept),
+      [...concepts.entries()].filter(([_, c]) => c.isConcept),
     );
     console.log(`[sync-aat] AAT concepts: ${aatConcepts.size}`);
 
-    const relevant: {
+    // Build entries
+    const entries: {
       name: string;
       nameZh: string | null;
       category: string;
@@ -341,101 +305,102 @@ export async function syncAat(): Promise<{
     }[] = [];
 
     for (const [uri, c] of aatConcepts) {
-      const hierarchyPath = buildHierarchyPath(uri, concepts).join(" > ");
-      const category = mapToDimension(hierarchyPath);
-      if (category === "other") continue;
+      const path = buildHierarchyPath(uri, concepts);
+      const dim = mapToDimension(path);
+      if (dim === "other") continue;
 
-      const enLabel =
-        c.labels.get("en") ||
-        c.labels.values().next().value ||
-        uri.split("/").pop()!;
+      const enLabel = c.labels.get("en") || c.labels.values().next().value;
+      if (!enLabel) continue;
       const zhLabel = c.labels.get("zh-hant") || c.labels.get("zh") || null;
 
-      // Collect all labels as tags (excluding the primary English and Chinese ones)
+      // Alt labels as tags (non-en, non-zh)
       const tags: string[] = [];
       for (const [lang, text] of c.labels) {
-        if (lang !== "en" && lang !== "zh-hant" && lang !== "zh") {
+        if (lang !== "en" && lang !== "zh-hant" && lang !== "zh")
           tags.push(text);
-        }
       }
 
-      // Get scope note text
+      // Scope note
       let visualDescription: string | null = null;
       for (const snUri of c.scopeNoteUris) {
-        const text = scopeNotes.get(snUri);
+        const text = scopeNoteTexts.get(snUri);
         if (text) {
           visualDescription = text;
           break;
         }
       }
 
-      relevant.push({
+      // Related concepts resolved to names
+      const relatedNames: string[] = [];
+      for (const relUri of c.relatedUris) {
+        const name = resolveConceptName(relUri, concepts);
+        if (name) relatedNames.push(name);
+      }
+
+      entries.push({
         name: enLabel,
         nameZh: zhLabel,
-        category,
-        subCategory: extractSubCategory(hierarchyPath),
+        category: dim,
+        subCategory: subCategory(path),
         visualDescription,
         tags: JSON.stringify(tags),
-        relatedConcepts: "[]", // Will be populated from broaderUris if needed
+        relatedConcepts: JSON.stringify(relatedNames),
       });
     }
 
-    console.log(
-      `[sync-aat] Relevant concepts (in our 7 dimensions): ${relevant.length}`,
-    );
+    console.log(`[sync-aat] Relevant: ${entries.length}`);
 
-    updateProgress({ stage: "importing", total: relevant.length, done: 0 });
+    updateProgress({ stage: "importing", total: entries.length, done: 0 });
 
     let inserted = 0;
     let updated = 0;
     const embeddingTexts: string[] = [];
     const embeddingNames: string[] = [];
 
-    for (let i = 0; i < relevant.length; i++) {
-      const c = relevant[i];
-
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
       const existing = await db
         .select({ id: artConcepts.id })
         .from(artConcepts)
-        .where(eq(artConcepts.name, c.name));
+        .where(eq(artConcepts.name, e.name));
 
       if (existing.length > 0) {
         await db
           .update(artConcepts)
           .set({
-            nameZh: c.nameZh,
-            category: c.category,
-            subCategory: c.subCategory,
-            visualDescription: c.visualDescription,
-            tags: c.tags,
+            nameZh: e.nameZh,
+            category: e.category,
+            subCategory: e.subCategory,
+            visualDescription: e.visualDescription,
+            tags: e.tags,
+            relatedConcepts: e.relatedConcepts,
             source: "aat",
-            sourceId: null,
           })
           .where(eq(artConcepts.id, existing[0].id));
         updated++;
       } else {
         await db.insert(artConcepts).values({
-          name: c.name,
-          nameZh: c.nameZh,
-          category: c.category,
-          subCategory: c.subCategory,
-          visualDescription: c.visualDescription,
-          tags: c.tags,
+          name: e.name,
+          nameZh: e.nameZh,
+          category: e.category,
+          subCategory: e.subCategory,
+          visualDescription: e.visualDescription,
+          tags: e.tags,
+          relatedConcepts: e.relatedConcepts,
           source: "aat",
         });
         inserted++;
       }
 
-      const scopeNote = c.visualDescription || "";
-      embeddingTexts.push(`${scopeNote} ${c.name} ${c.nameZh || ""}`);
-      embeddingNames.push(c.name);
+      embeddingTexts.push(
+        `${e.visualDescription || ""} ${e.name} ${e.nameZh || ""}`,
+      );
+      embeddingNames.push(e.name);
 
-      if (i % 200 === 0) {
-        updateProgress({ done: i + 1 });
-      }
+      if (i % 200 === 0) updateProgress({ done: i + 1 });
     }
 
-    updateProgress({ stage: "embedding", done: relevant.length });
+    updateProgress({ stage: "embedding", done: entries.length });
 
     if (embeddingTexts.length > 0) {
       const batchSize = 20;
@@ -449,7 +414,7 @@ export async function syncAat(): Promise<{
             .set({ embedding: JSON.stringify(embeddings[j]) })
             .where(eq(artConcepts.name, names[j]));
         }
-        updateProgress({ done: relevant.length + i + batch.length });
+        updateProgress({ done: entries.length + i + batch.length });
       }
     }
 
