@@ -14,6 +14,7 @@ import {
 } from "../db/schema";
 import { eq, like, or, and, desc, sql } from "drizzle-orm";
 import { generateEmbedding, cosineSimilarity } from "../knowledge/embedding";
+import { sqlite } from "../db";
 import {
   searchModels,
   searchImages,
@@ -479,40 +480,75 @@ export const findConcepts = tool({
     "用自然语言意图描述搜索匹配的艺术概念。当你不知道确切概念名、只有模糊方向时使用。如用户说'神秘黑暗的感觉'，搜索 matching 的视觉概念。",
   inputSchema: z.object({
     intent: z.string().describe("意图描述，如'柔和梦幻的光线'"),
+    category: z
+      .enum([
+        "lighting",
+        "composition",
+        "color",
+        "texture",
+        "setting",
+        "subject",
+        "style",
+        "technical",
+      ])
+      .optional()
+      .describe("可选，限定搜索范围到某个维度"),
   }),
-  execute: async ({ intent }) => {
+  execute: async ({ intent, category }) => {
     const queryEmbedding = await generateEmbedding(intent);
+    const vec = new Float32Array(queryEmbedding);
+    const blob = Buffer.from(vec.buffer);
 
-    const all = await db
+    const rows = sqlite
+      .prepare(
+        `SELECT v.id, v.distance
+         FROM vec_concepts v
+         WHERE v.embedding MATCH ? AND k = ?
+         ORDER BY v.distance
+         LIMIT 8`,
+      )
+      .all(blob, 8) as { id: string; distance: number }[];
+
+    if (rows.length === 0) {
+      return "向量索引为空。请先生成 embedding。";
+    }
+
+    // Fetch concept details for matched names, optionally filtered by category
+    const names = rows.map((r) => r.id);
+    const conds = [or(...names.map((n) => eq(artConcepts.name, n)))];
+    if (category) conds.push(eq(artConcepts.category, category));
+
+    const concepts = await db
       .select({
         name: artConcepts.name,
         nameZh: artConcepts.nameZh,
         category: artConcepts.category,
         subCategory: artConcepts.subCategory,
         visualDescription: artConcepts.visualDescription,
-        embedding: artConcepts.embedding,
       })
-      .from(artConcepts);
+      .from(artConcepts)
+      .where(and(...conds));
 
-    const scored = all
-      .filter((c) => c.embedding)
+    // Build score map from vec results (distance = 1 - cosine_similarity)
+    const scoreMap = new Map(rows.map((r) => [r.id, 1 - r.distance]));
+
+    const results = concepts
       .map((c) => ({
         name: c.name,
         nameZh: c.nameZh,
         category: c.category,
         subCategory: c.subCategory,
         snippet: (c.visualDescription || "").slice(0, 150),
-        score: cosineSimilarity(queryEmbedding, JSON.parse(c.embedding!)),
+        score: scoreMap.get(c.name) ?? 0,
       }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 8)
-      .filter((c) => c.score > 0.5);
+      .filter((c) => c.score > 0.5)
+      .sort((a, b) => b.score - a.score);
 
-    if (scored.length === 0) {
-      return "未找到相关概念。建议尝试使用 explore_dimension 浏览相关维度。";
+    if (results.length === 0) {
+      return "未找到匹配度高的概念。建议尝试 explore_dimension 浏览相关维度。";
     }
 
-    return scored;
+    return results;
   },
 });
 

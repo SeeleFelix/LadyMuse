@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { db, sqlite } from "../db";
 import { artConcepts } from "../db/schema";
 import { isNull, eq, and } from "drizzle-orm";
 import { generateEmbeddings } from "./embedding";
@@ -37,11 +37,18 @@ export async function embedAll(dimension?: string, name?: string) {
       const batch = texts.slice(i, i + B);
       const names = rows.slice(i, i + B).map((r) => r.name);
       const embeddings = await generateEmbeddings(batch);
+      const insertStmt = sqlite.prepare(
+        "INSERT OR REPLACE INTO vec_concepts (id, embedding) VALUES (?, ?)",
+      );
       for (let j = 0; j < embeddings.length; j++) {
+        const name = names[j];
+        const vec = new Float32Array(embeddings[j]);
+        const blob = Buffer.from(vec.buffer);
+        insertStmt.run(name, blob);
         await db
           .update(artConcepts)
           .set({ embedding: JSON.stringify(embeddings[j]) })
-          .where(eq(artConcepts.name, names[j]));
+          .where(eq(artConcepts.name, name));
       }
       updateProgress({ done: Math.min(i + B, texts.length) });
     }

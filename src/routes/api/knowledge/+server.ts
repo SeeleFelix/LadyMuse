@@ -1,13 +1,10 @@
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
-import { db } from "$lib/server/db";
+import { db, sqlite } from "$lib/server/db";
 import { artConcepts, artPatterns, artReferences } from "$lib/server/db/schema";
 import { eq, like, or, and, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import {
-  generateEmbedding,
-  cosineSimilarity,
-} from "$lib/server/knowledge/embedding";
+import { generateEmbedding } from "$lib/server/knowledge/embedding";
 
 export const GET: RequestHandler = async ({ url }) => {
   const category = url.searchParams.get("category");
@@ -19,13 +16,29 @@ export const GET: RequestHandler = async ({ url }) => {
 
   if (mode === "semantic" && search) {
     const queryEmbedding = await generateEmbedding(search);
+    const vec = new Float32Array(queryEmbedding);
+    const blob = Buffer.from(vec.buffer);
 
-    const conditions_semantic: SQL[] = [];
-    if (category) {
-      conditions_semantic.push(eq(artConcepts.category, category));
+    const rows = sqlite
+      .prepare(
+        `SELECT v.id, v.distance
+         FROM vec_concepts v
+         WHERE v.embedding MATCH ? AND k = ?
+         ORDER BY v.distance
+         LIMIT 20`,
+      )
+      .all(blob, 20) as { id: string; distance: number }[];
+
+    if (rows.length === 0) {
+      return json([]);
     }
 
-    const baseQuery = db
+    const scoreMap = new Map(rows.map((r) => [r.id, 1 - r.distance]));
+    const names = rows.map((r) => r.id);
+    const semConds = [or(...names.map((n) => eq(artConcepts.name, n)))];
+    if (category) semConds.push(eq(artConcepts.category, category));
+
+    const concepts = await db
       .select({
         name: artConcepts.name,
         nameZh: artConcepts.nameZh,
@@ -34,14 +47,10 @@ export const GET: RequestHandler = async ({ url }) => {
         visualDescription: artConcepts.visualDescription,
         embedding: artConcepts.embedding,
       })
-      .from(artConcepts);
+      .from(artConcepts)
+      .where(and(...semConds));
 
-    const all = await (conditions_semantic.length > 0
-      ? baseQuery.where(and(...conditions_semantic))
-      : baseQuery);
-
-    const results = all
-      .filter((c) => c.embedding)
+    const results = concepts
       .map((c) => ({
         name: c.name,
         nameZh: c.nameZh,
@@ -49,11 +58,10 @@ export const GET: RequestHandler = async ({ url }) => {
         subCategory: c.subCategory,
         snippet: (c.visualDescription || "").slice(0, 150),
         hasEmbedding: c.embedding ? 1 : 0,
-        score: cosineSimilarity(queryEmbedding, JSON.parse(c.embedding!)),
+        score: scoreMap.get(c.name) ?? 0,
       }))
-      .sort((a, b) => b.score - a.score)
       .filter((c) => c.score > 0.5)
-      .slice(0, 20);
+      .sort((a, b) => b.score - a.score);
 
     return json(results);
   }
