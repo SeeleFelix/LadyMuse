@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { artConcepts } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { generateEmbeddings } from "./embedding";
 
 // Wikipedia 分类 → 维度映射
@@ -115,6 +115,7 @@ export async function syncWikipedia(): Promise<{
 }> {
   let inserted = 0;
   let skipped = 0;
+  const embeddingTargets: string[] = [];
 
   for (const [wikiCat, mapping] of Object.entries(WIKIPEDIA_CATEGORY_MAPPING)) {
     console.log(`Processing: ${wikiCat}`);
@@ -128,6 +129,7 @@ export async function syncWikipedia(): Promise<{
         title.startsWith("Outline of") ||
         title.startsWith("Index of")
       ) {
+        skipped++;
         continue;
       }
 
@@ -177,32 +179,37 @@ export async function syncWikipedia(): Promise<{
           .where(eq(artConcepts.id, old.id));
 
         skipped++;
+        embeddingTargets.push(title);
       } else {
         await db.insert(artConcepts).values(data);
         inserted++;
+        embeddingTargets.push(title);
       }
 
       await new Promise((r) => setTimeout(r, DELAY_MS));
     }
   }
 
-  // 批量生成 embedding
-  const all = await db
-    .select({
-      name: artConcepts.name,
-      visualDescription: artConcepts.visualDescription,
-    })
-    .from(artConcepts)
-    .where(eq(artConcepts.source, "wikipedia"));
+  // 批量生成 embedding（仅处理本次同步涉及的条目）
+  if (embeddingTargets.length > 0) {
+    const rows = await db
+      .select({
+        name: artConcepts.name,
+        visualDescription: artConcepts.visualDescription,
+      })
+      .from(artConcepts)
+      .where(or(...embeddingTargets.map((n) => eq(artConcepts.name, n))));
 
-  const texts = all.map((c) => c.visualDescription || "");
-  const embeddings = await generateEmbeddings(texts);
-
-  for (let i = 0; i < all.length; i++) {
-    await db
-      .update(artConcepts)
-      .set({ embedding: JSON.stringify(embeddings[i]) })
-      .where(eq(artConcepts.name, all[i].name));
+    const texts = rows.map((c) => c.visualDescription || "");
+    if (texts.length > 0) {
+      const embeddings = await generateEmbeddings(texts);
+      for (let i = 0; i < rows.length; i++) {
+        await db
+          .update(artConcepts)
+          .set({ embedding: JSON.stringify(embeddings[i]) })
+          .where(eq(artConcepts.name, rows[i].name));
+      }
+    }
   }
 
   return { inserted, skipped };
