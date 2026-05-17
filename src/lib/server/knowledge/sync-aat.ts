@@ -1,14 +1,16 @@
-import { spawn } from "child_process";
 import {
   createWriteStream,
+  createReadStream,
   existsSync,
   readdirSync,
   statSync,
   mkdirSync,
   unlinkSync,
+  renameSync,
 } from "fs";
 import { finished } from "stream/promises";
 import { createInterface } from "readline";
+import { execSync } from "child_process";
 import { db } from "../db";
 import { artConcepts } from "../db/schema";
 import { eq } from "drizzle-orm";
@@ -122,97 +124,69 @@ async function downloadZip(): Promise<string> {
   return zipPath;
 }
 
-function streamNtriples(zipPath: string): Promise<{
+async function collectAatUris(ntPath: string): Promise<Set<string>> {
+  return new Promise((resolve, reject) => {
+    const uris = new Set<string>();
+    let lineCount = 0;
+    const rl = createInterface({ input: createReadStream(ntPath) });
+
+    rl.on("line", (line: string) => {
+      lineCount++;
+      const t = parseTriple(line);
+      if (!t) return;
+      if (
+        (t.p === RDF_TYPE && t.o === GVP_CONCEPT) ||
+        (t.p === SKOS_IN_SCHEME && t.o === AAT_SCHEME)
+      ) {
+        uris.add(t.s);
+      }
+      if (lineCount % 1_000_000 === 0) {
+        console.log(`[sync-aat] Pass 1: ${lineCount} lines, ${uris.size} URIs`);
+        updateProgress({ done: lineCount });
+      }
+    });
+
+    rl.on("close", () => {
+      console.log(`[sync-aat] Pass 1 complete: ${uris.size} AAT concept URIs`);
+      resolve(uris);
+    });
+    rl.on("error", reject);
+  });
+}
+
+function buildConceptData(
+  ntPath: string,
+  aatUris: Set<string>,
+): Promise<{
   concepts: Map<string, ConceptRecord>;
   scopeNotes: Map<string, string>;
 }> {
   return new Promise((resolve, reject) => {
     const concepts = new Map<string, ConceptRecord>();
     const scopeNotes = new Map<string, string>();
-    const aatUris = new Set<string>(); // confirmed AAT concept URIs
-    const pendingLabels = new Map<string, Map<string, string>>();
-    const pendingScopeNotes = new Map<string, string[]>();
-    const pendingBroader = new Map<string, string[]>();
     let lineCount = 0;
 
-    const flushPending = (uri: string) => {
-      const labels = pendingLabels.get(uri);
-      const snUris = pendingScopeNotes.get(uri) || [];
-      const broaderUris = pendingBroader.get(uri) || [];
-      concepts.set(uri, {
-        uri,
-        labels: labels || new Map(),
-        scopeNoteUris: snUris,
-        broaderUris,
-        isAatConcept: true,
-      });
-      pendingLabels.delete(uri);
-      pendingScopeNotes.delete(uri);
-      pendingBroader.delete(uri);
+    const getOrCreate = (uri: string): ConceptRecord => {
+      if (!concepts.has(uri)) {
+        concepts.set(uri, {
+          uri,
+          labels: new Map(),
+          scopeNoteUris: [],
+          broaderUris: [],
+          isAatConcept: true,
+        });
+      }
+      return concepts.get(uri)!;
     };
 
-    const unzip = spawn("unzip", ["-p", zipPath, NT_FILE], {
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-
-    const rl = createInterface({ input: unzip.stdout! });
+    const rl = createInterface({ input: createReadStream(ntPath) });
 
     rl.on("line", (line: string) => {
       lineCount++;
       const t = parseTriple(line);
       if (!t) return;
 
-      // Identify AAT concepts: gvp:Concept type OR inScheme aat:
-      if (t.p === RDF_TYPE && t.o === GVP_CONCEPT) {
-        aatUris.add(t.s);
-        flushPending(t.s);
-        return;
-      }
-      if (t.p === SKOS_IN_SCHEME && t.o === AAT_SCHEME) {
-        aatUris.add(t.s);
-        flushPending(t.s);
-        return;
-      }
-
-      // Only store data for confirmed AAT concept URIs
-      if (aatUris.has(t.s)) {
-        const rec = concepts.get(t.s)!;
-
-        if (t.p === RDFS_LABEL && t.oType === "literal") {
-          const [text, lang] = t.o.split("\0");
-          rec.labels.set(lang, text);
-          return;
-        }
-        if (t.p === SKOS_SCOPE_NOTE && t.oType === "uri") {
-          rec.scopeNoteUris.push(t.o);
-          return;
-        }
-        if (t.p === GVP_BROADER_PREFERRED && t.oType === "uri") {
-          rec.broaderUris.push(t.o);
-          return;
-        }
-        return;
-      }
-
-      // Buffer data for URIs that might be concepts (not yet confirmed)
-      if (t.p === RDFS_LABEL && t.oType === "literal") {
-        const [text, lang] = t.o.split("\0");
-        if (!pendingLabels.has(t.s)) pendingLabels.set(t.s, new Map());
-        pendingLabels.get(t.s)!.set(lang, text);
-        return;
-      }
-      if (t.p === SKOS_SCOPE_NOTE && t.oType === "uri") {
-        if (!pendingScopeNotes.has(t.s)) pendingScopeNotes.set(t.s, []);
-        pendingScopeNotes.get(t.s)!.push(t.o);
-        return;
-      }
-      if (t.p === GVP_BROADER_PREFERRED && t.oType === "uri") {
-        if (!pendingBroader.has(t.s)) pendingBroader.set(t.s, []);
-        pendingBroader.get(t.s)!.push(t.o);
-        return;
-      }
-
-      // Scope note text (always collect, they're small)
+      // Scope note text (collect regardless of subject)
       if (
         t.p === RDF_VALUE &&
         t.oType === "literal" &&
@@ -223,27 +197,34 @@ function streamNtriples(zipPath: string): Promise<{
         return;
       }
 
-      // Progress
+      // Only process triples about AAT concepts
+      if (!aatUris.has(t.s)) return;
+
+      const rec = getOrCreate(t.s);
+
+      if (t.p === RDFS_LABEL && t.oType === "literal") {
+        const [text, lang] = t.o.split("\0");
+        rec.labels.set(lang, text);
+      } else if (t.p === SKOS_SCOPE_NOTE && t.oType === "uri") {
+        rec.scopeNoteUris.push(t.o);
+      } else if (t.p === GVP_BROADER_PREFERRED && t.oType === "uri") {
+        rec.broaderUris.push(t.o);
+      }
+
       if (lineCount % 1_000_000 === 0) {
         console.log(
-          `[sync-aat] Parsed ${lineCount} lines, ${aatUris.size} concepts`,
+          `[sync-aat] Pass 2: ${lineCount} lines, ${concepts.size} concepts`,
         );
         updateProgress({ done: lineCount });
       }
     });
 
     rl.on("close", () => {
-      // Flush any remaining pending data for confirmed concepts
-      for (const uri of aatUris) {
-        if (!concepts.has(uri)) flushPending(uri);
-      }
       console.log(
-        `[sync-aat] Parse complete: ${lineCount} lines, ${concepts.size} concepts, ${scopeNotes.size} scope notes`,
+        `[sync-aat] Pass 2 complete: ${concepts.size} concepts, ${scopeNotes.size} scope notes`,
       );
       resolve({ concepts, scopeNotes });
     });
-
-    unzip.on("error", reject);
     rl.on("error", reject);
   });
 }
@@ -319,8 +300,29 @@ export async function syncAat(): Promise<{
     updateProgress({ stage: "downloading" });
     const zipPath = await downloadZip();
 
+    // Extract to disk
+    const ntPath = zipPath.replace(".zip", ".nt");
+    if (!existsSync(ntPath) || statSync(ntPath).size === 0) {
+      console.log("[sync-aat] Extracting to", ntPath);
+      execSync(`unzip -o "${zipPath}" "${NT_FILE}" -d "${DATA_DIR}"`, {
+        stdio: "inherit",
+      });
+      // unzip extracts to DATA_DIR/NT_FILE, move if needed
+      const extracted = `${DATA_DIR}/${NT_FILE}`;
+      if (extracted !== ntPath) {
+        renameSync(extracted, ntPath);
+      }
+    } else {
+      console.log("[sync-aat] Using cached", ntPath);
+    }
+
+    // Pass 1: collect AAT concept URIs
     updateProgress({ stage: "parsing" });
-    const { concepts, scopeNotes } = await streamNtriples(zipPath);
+    const aatUris = await collectAatUris(ntPath);
+
+    // Pass 2: build concept data for those URIs only
+    updateProgress({ stage: "parsing", done: 0 });
+    const { concepts, scopeNotes } = await buildConceptData(ntPath, aatUris);
 
     // Filter to only AAT concepts (gvp:Concept + inScheme aat:)
     const aatConcepts = new Map(
