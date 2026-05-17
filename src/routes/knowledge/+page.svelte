@@ -67,18 +67,34 @@
     lastSync: null,
   });
 
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let sse: EventSource | null = null;
+
   onMount(() => {
     loadSyncStatus();
     loadConcepts();
-    const sse = new EventSource("/api/knowledge/sync/progress");
+    connectSSE();
+    // Polling fallback every 2s
+    pollTimer = setInterval(loadSyncStatus, 2000);
+    return () => {
+      sse?.close();
+      if (pollTimer) clearInterval(pollTimer);
+    };
+  });
+
+  function connectSSE() {
+    sse = new EventSource("/api/knowledge/sync/progress");
     sse.addEventListener("progress", (e) => {
       syncStatus = JSON.parse(e.data);
     });
     sse.addEventListener("status", (e) => {
       syncStatus = JSON.parse(e.data);
     });
-    return () => sse.close();
-  });
+    sse.onerror = () => {
+      sse?.close();
+      setTimeout(connectSSE, 3000);
+    };
+  }
 
   async function loadSyncStatus() {
     const res = await fetch("/api/knowledge/sync/status");

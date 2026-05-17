@@ -322,7 +322,7 @@ export async function syncAat(): Promise<{
     updateProgress({ stage: "downloading" });
     const zipPath = await downloadZip();
 
-    updateProgress({ stage: "parsing" });
+    updateProgress({ stage: "parsing", total: 27_000_000 });
     const ntPath = extractNt(zipPath);
     const allConcepts = parseNtFile(ntPath);
 
@@ -429,7 +429,13 @@ export async function syncAat(): Promise<{
       if (i % 200 === 0) updateProgress({ done: i + 1 });
     }
 
-    updateProgress({ stage: "embedding", done: entries.length });
+    const totalBatches = Math.ceil(embTexts.length / 20);
+    const totalSteps = entries.length + totalBatches;
+    updateProgress({
+      stage: "embedding",
+      total: totalSteps,
+      done: entries.length,
+    });
 
     if (embTexts.length > 0) {
       const B = 20;
@@ -443,7 +449,7 @@ export async function syncAat(): Promise<{
             .set({ embedding: JSON.stringify(embeddings[j]) })
             .where(eq(artConcepts.name, names[j]));
         }
-        updateProgress({ done: entries.length + i + batch.length });
+        updateProgress({ done: entries.length + Math.floor(i / B) + 1 });
       }
     }
 
