@@ -65,7 +65,10 @@ function parseTriple(line: string): Triple | null {
 function findLatestZip(): string | null {
   if (!existsSync(DATA_DIR)) return null;
   const files = readdirSync(DATA_DIR).filter(
-    (f) => f.startsWith("aat_full_") && f.endsWith(".zip"),
+    (f) =>
+      f.startsWith("aat_full_") &&
+      f.endsWith(".zip") &&
+      statSync(`${DATA_DIR}/${f}`).size > 0,
   );
   if (files.length === 0) return null;
   files.sort().reverse();
