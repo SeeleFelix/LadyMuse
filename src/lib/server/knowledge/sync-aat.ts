@@ -27,7 +27,7 @@ const P_RDF_TYPE = "rdf-syntax-ns#type";
 const P_SKOS_INS = "skos/core#inScheme";
 const P_SKOS_SN = "skos/core#scopeNote";
 const P_SKOS_REL = "skos/core#related";
-const P_GVP_BP = "ontology#broaderPreferredExtended";
+const P_GVP_BP = "ontology#broaderPreferred"; // direct parent (broaderPreferred, NOT broaderPreferredExtended)
 const P_RDF_VALUE = "rdf-syntax-ns#value";
 const O_GVP_CONCEPT = "ontology#Concept";
 const O_AAT_SCHEME = "vocab.getty.edu/aat/";
@@ -229,7 +229,7 @@ function parseNtFile(ntPath: string): Map<string, RawConcept> {
       } else if (line.includes(P_SKOS_SN)) {
         const obj = extractObject(line);
         if (obj && obj.isUri) getOrCreate(subj).sn.push(obj.text);
-      } else if (line.includes(P_GVP_BP)) {
+      } else if (line.includes(P_GVP_BP) && !line.includes("Extended")) {
         const obj = extractObject(line);
         if (obj && obj.isUri) getOrCreate(subj).broader.push(obj.text);
       } else if (line.includes(P_SKOS_REL)) {
