@@ -2,6 +2,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { getConfig } from "../config";
 import { getModelProfile, getDefaultProfile } from "./model-profiles";
+import { buildKnowledgeDirectory } from "../knowledge/directory";
 
 interface ModuleConfig {
   file: string;
@@ -97,6 +98,7 @@ export async function buildSystemPrompt(): Promise<string> {
   const profile = getModelProfile(targetModelId) || getDefaultProfile();
 
   const modules = await loadPromptModules(targetModelId);
+  const directory = await buildKnowledgeDirectory();
 
-  return `${modules}\n\n${buildSuffix(profile, promptStyle, outputLang)}`;
+  return `${modules}\n\n${directory}\n\n${buildSuffix(profile, promptStyle, outputLang)}`;
 }
