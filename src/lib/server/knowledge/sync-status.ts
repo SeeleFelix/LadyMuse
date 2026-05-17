@@ -1,4 +1,4 @@
-interface SyncStatusData {
+export interface SyncStatusData {
   running: boolean;
   source: "aat" | "wikipedia" | null;
   stage: "downloading" | "parsing" | "importing" | "embedding" | null;
@@ -48,7 +48,10 @@ export function updateProgress(update: {
   if (update.total != null) status.total = update.total;
   if (update.done != null) status.done = update.done;
   if (status.total > 0) {
-    status.percent = Math.round((status.done / status.total) * 100);
+    status.percent = Math.min(
+      100,
+      Math.round((status.done / status.total) * 100),
+    );
   }
   broadcast();
 }
