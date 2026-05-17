@@ -311,6 +311,16 @@ const BRANCH_MAP: Record<string, string> = {
   "human figure-related concepts": "subject",
   "color-related concepts": "color",
   "artistic concepts": "style",
+  // Additional relevant branches from unmapped analysis
+  "genres, art": "style",
+  "concepts, culture-related": "style",
+  "concepts, sociological": "style",
+  "multidisciplinary concept": "style",
+  "religion (belief system)": "subject",
+  "components, lighting device": "lighting",
+  "components, costume": "subject",
+  "divisions, political": "setting",
+  "information, categories of": "technical",
 };
 
 function mapToDimension(pathLabels: string[]): string {
