@@ -3,6 +3,7 @@ import { db } from "../db";
 import { artConcepts } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { generateEmbeddings } from "./embedding";
+import { startSync, updateProgress, finishSync, failSync } from "./sync-status";
 
 // AAT 层级路径前缀 → 我们的维度
 const AAT_HIERARCHY_MAPPING: Record<string, string> = {
@@ -191,65 +192,86 @@ export async function syncAat(): Promise<{
   inserted: number;
   updated: number;
 }> {
-  const concepts = await downloadAndParse();
-
-  const relevant = concepts.filter((c) => {
-    const dim = mapToDimension(c.hierarchyPath);
-    return dim !== "other";
-  });
-
-  let inserted = 0;
-  let updated = 0;
-
-  const embeddingTexts: string[] = [];
-  const embeddingTargets: { name: string }[] = [];
-
-  for (const c of relevant) {
-    const category = mapToDimension(c.hierarchyPath);
-    const subCategory = extractSubCategory(c.hierarchyPath);
-    const scopeNote = c.scopeNote || "";
-
-    const existing = await db
-      .select({ id: artConcepts.id })
-      .from(artConcepts)
-      .where(eq(artConcepts.name, c.prefLabel));
-
-    const data = {
-      name: c.prefLabel,
-      nameZh: c.prefLabelZh || null,
-      category,
-      subCategory,
-      visualDescription: scopeNote,
-      tags: JSON.stringify(c.altLabels),
-      relatedConcepts: JSON.stringify(c.relatedUris.map(extractNameFromUri)),
-      source: "aat" as const,
-      sourceId: c.uri,
-    };
-
-    if (existing.length > 0) {
-      await db
-        .update(artConcepts)
-        .set(data)
-        .where(eq(artConcepts.id, existing[0].id));
-      updated++;
-    } else {
-      await db.insert(artConcepts).values(data);
-      inserted++;
-    }
-
-    embeddingTexts.push(`${scopeNote} ${c.altLabels.join(" ")} ${c.prefLabel}`);
-    embeddingTargets.push({ name: c.prefLabel });
+  if (!startSync("aat")) {
+    throw new Error("Sync already in progress");
   }
 
-  if (embeddingTexts.length > 0) {
-    const embeddings = await generateEmbeddings(embeddingTexts);
-    for (let i = 0; i < embeddings.length; i++) {
-      await db
-        .update(artConcepts)
-        .set({ embedding: JSON.stringify(embeddings[i]) })
-        .where(eq(artConcepts.name, embeddingTargets[i].name));
-    }
-  }
+  try {
+    updateProgress({ stage: "downloading" });
+    const concepts = await downloadAndParse();
 
-  return { inserted, updated };
+    const relevant = concepts.filter((c) => {
+      const dim = mapToDimension(c.hierarchyPath);
+      return dim !== "other";
+    });
+
+    updateProgress({ stage: "importing", total: relevant.length, done: 0 });
+
+    let inserted = 0;
+    let updated = 0;
+
+    const embeddingTexts: string[] = [];
+    const embeddingTargets: { name: string }[] = [];
+
+    for (let i = 0; i < relevant.length; i++) {
+      const c = relevant[i];
+      const category = mapToDimension(c.hierarchyPath);
+      const subCategory = extractSubCategory(c.hierarchyPath);
+      const scopeNote = c.scopeNote || "";
+
+      const existing = await db
+        .select({ id: artConcepts.id })
+        .from(artConcepts)
+        .where(eq(artConcepts.name, c.prefLabel));
+
+      const data = {
+        name: c.prefLabel,
+        nameZh: c.prefLabelZh || null,
+        category,
+        subCategory,
+        visualDescription: scopeNote,
+        tags: JSON.stringify(c.altLabels),
+        relatedConcepts: JSON.stringify(c.relatedUris.map(extractNameFromUri)),
+        source: "aat" as const,
+        sourceId: c.uri,
+      };
+
+      if (existing.length > 0) {
+        await db
+          .update(artConcepts)
+          .set(data)
+          .where(eq(artConcepts.id, existing[0].id));
+        updated++;
+      } else {
+        await db.insert(artConcepts).values(data);
+        inserted++;
+      }
+
+      embeddingTexts.push(
+        `${scopeNote} ${c.altLabels.join(" ")} ${c.prefLabel}`,
+      );
+      embeddingTargets.push({ name: c.prefLabel });
+
+      if (i % 100 === 0) {
+        updateProgress({ done: Math.min(i + 1, relevant.length) });
+      }
+    }
+
+    if (embeddingTexts.length > 0) {
+      updateProgress({ stage: "embedding" });
+      const embeddings = await generateEmbeddings(embeddingTexts);
+      for (let i = 0; i < embeddings.length; i++) {
+        await db
+          .update(artConcepts)
+          .set({ embedding: JSON.stringify(embeddings[i]) })
+          .where(eq(artConcepts.name, embeddingTargets[i].name));
+      }
+    }
+
+    finishSync();
+    return { inserted, updated };
+  } catch (e: any) {
+    failSync(e.message);
+    throw e;
+  }
 }

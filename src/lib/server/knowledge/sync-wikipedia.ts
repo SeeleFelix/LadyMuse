@@ -2,6 +2,7 @@ import { db } from "../db";
 import { artConcepts } from "../db/schema";
 import { eq, or } from "drizzle-orm";
 import { generateEmbeddings } from "./embedding";
+import { startSync, updateProgress, finishSync, failSync } from "./sync-status";
 
 // Wikipedia 分类 → 维度映射
 const WIKIPEDIA_CATEGORY_MAPPING: Record<
@@ -113,104 +114,125 @@ export async function syncWikipedia(): Promise<{
   inserted: number;
   skipped: number;
 }> {
-  let inserted = 0;
-  let skipped = 0;
-  const embeddingTargets: string[] = [];
+  if (!startSync("wikipedia")) {
+    throw new Error("Sync already in progress");
+  }
 
-  for (const [wikiCat, mapping] of Object.entries(WIKIPEDIA_CATEGORY_MAPPING)) {
-    console.log(`Processing: ${wikiCat}`);
+  try {
+    let inserted = 0;
+    let skipped = 0;
+    const embeddingTargets: string[] = [];
 
-    const titles = await getCategoryMembers(wikiCat);
+    const categoryEntries = Object.entries(WIKIPEDIA_CATEGORY_MAPPING);
+    updateProgress({
+      stage: "downloading",
+      total: categoryEntries.length,
+      done: 0,
+    });
 
-    for (const title of titles) {
-      if (
-        title.startsWith("List of") ||
-        title.startsWith("Glossary of") ||
-        title.startsWith("Outline of") ||
-        title.startsWith("Index of")
-      ) {
-        skipped++;
-        continue;
+    for (let ci = 0; ci < categoryEntries.length; ci++) {
+      const [wikiCat, mapping] = categoryEntries[ci];
+      console.log(`Processing: ${wikiCat}`);
+
+      const titles = await getCategoryMembers(wikiCat);
+
+      for (const title of titles) {
+        if (
+          title.startsWith("List of") ||
+          title.startsWith("Glossary of") ||
+          title.startsWith("Outline of") ||
+          title.startsWith("Index of")
+        ) {
+          skipped++;
+          continue;
+        }
+
+        const summary = await getPageSummary(title);
+        if (!summary || !summary.extract) {
+          skipped++;
+          continue;
+        }
+
+        const nameZh = await getChineseTitle(title);
+
+        const existing = await db
+          .select({
+            id: artConcepts.id,
+            source: artConcepts.source,
+            visualDescription: artConcepts.visualDescription,
+          })
+          .from(artConcepts)
+          .where(eq(artConcepts.name, title));
+
+        const data = {
+          name: title,
+          nameZh: nameZh || null,
+          category: mapping.category,
+          subCategory: mapping.subCategory || null,
+          visualDescription: summary.extract,
+          source: "wikipedia" as const,
+          sourceId: String(summary.pageid),
+        };
+
+        if (existing.length > 0) {
+          const old = existing[0];
+          const oldSource = old.source || "";
+          const newSource = oldSource.includes("wikipedia")
+            ? oldSource
+            : `${oldSource}+wikipedia`;
+
+          await db
+            .update(artConcepts)
+            .set({
+              ...data,
+              source: newSource,
+              visualDescription: oldSource.includes("aat")
+                ? old.visualDescription
+                : summary.extract,
+            })
+            .where(eq(artConcepts.id, old.id));
+
+          skipped++;
+          embeddingTargets.push(title);
+        } else {
+          await db.insert(artConcepts).values(data);
+          inserted++;
+          embeddingTargets.push(title);
+        }
+
+        await new Promise((r) => setTimeout(r, DELAY_MS));
       }
 
-      const summary = await getPageSummary(title);
-      if (!summary || !summary.extract) {
-        skipped++;
-        continue;
-      }
+      updateProgress({ done: ci + 1 });
+    }
 
-      const nameZh = await getChineseTitle(title);
-
-      const existing = await db
+    // 批量生成 embedding（仅处理本次同步涉及的条目）
+    if (embeddingTargets.length > 0) {
+      updateProgress({ stage: "embedding" });
+      const rows = await db
         .select({
-          id: artConcepts.id,
-          source: artConcepts.source,
+          name: artConcepts.name,
           visualDescription: artConcepts.visualDescription,
         })
         .from(artConcepts)
-        .where(eq(artConcepts.name, title));
+        .where(or(...embeddingTargets.map((n) => eq(artConcepts.name, n))));
 
-      const data = {
-        name: title,
-        nameZh: nameZh || null,
-        category: mapping.category,
-        subCategory: mapping.subCategory || null,
-        visualDescription: summary.extract,
-        source: "wikipedia" as const,
-        sourceId: String(summary.pageid),
-      };
-
-      if (existing.length > 0) {
-        const old = existing[0];
-        const oldSource = old.source || "";
-        const newSource = oldSource.includes("wikipedia")
-          ? oldSource
-          : `${oldSource}+wikipedia`;
-
-        await db
-          .update(artConcepts)
-          .set({
-            ...data,
-            source: newSource,
-            visualDescription: oldSource.includes("aat")
-              ? old.visualDescription
-              : summary.extract,
-          })
-          .where(eq(artConcepts.id, old.id));
-
-        skipped++;
-        embeddingTargets.push(title);
-      } else {
-        await db.insert(artConcepts).values(data);
-        inserted++;
-        embeddingTargets.push(title);
-      }
-
-      await new Promise((r) => setTimeout(r, DELAY_MS));
-    }
-  }
-
-  // 批量生成 embedding（仅处理本次同步涉及的条目）
-  if (embeddingTargets.length > 0) {
-    const rows = await db
-      .select({
-        name: artConcepts.name,
-        visualDescription: artConcepts.visualDescription,
-      })
-      .from(artConcepts)
-      .where(or(...embeddingTargets.map((n) => eq(artConcepts.name, n))));
-
-    const texts = rows.map((c) => c.visualDescription || "");
-    if (texts.length > 0) {
-      const embeddings = await generateEmbeddings(texts);
-      for (let i = 0; i < rows.length; i++) {
-        await db
-          .update(artConcepts)
-          .set({ embedding: JSON.stringify(embeddings[i]) })
-          .where(eq(artConcepts.name, rows[i].name));
+      const texts = rows.map((c) => c.visualDescription || "");
+      if (texts.length > 0) {
+        const embeddings = await generateEmbeddings(texts);
+        for (let i = 0; i < rows.length; i++) {
+          await db
+            .update(artConcepts)
+            .set({ embedding: JSON.stringify(embeddings[i]) })
+            .where(eq(artConcepts.name, rows[i].name));
+        }
       }
     }
-  }
 
-  return { inserted, skipped };
+    finishSync();
+    return { inserted, skipped };
+  } catch (e: any) {
+    failSync(e.message);
+    throw e;
+  }
 }
