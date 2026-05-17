@@ -1,245 +1,365 @@
 <script lang="ts">
   import { onMount } from "svelte";
 
-  interface Technique {
-    id: number;
+  interface Concept {
     name: string;
     nameZh: string | null;
-    description: string | null;
-    promptKeywords: string;
-    negativeKeywords: string | null;
-    moodTags: string | null;
-    difficulty: string | null;
+    category: string;
+    subCategory: string | null;
+    snippet: string;
+    tags: string[];
+    score?: number;
   }
 
-  interface Subcategory {
-    id: number;
+  interface ConceptDetail {
     name: string;
     nameZh: string | null;
-    techniques: Technique[];
+    category: string;
+    subCategory: string | null;
+    visualDescription: string | null;
+    tags: string[];
+    tagUsage: string | null;
+    naturalLanguage: string | null;
+    nlUsage: string | null;
+    relatedConcepts: { name: string; nameZh: string | null }[];
+    source: string;
   }
 
-  interface Category {
-    id: number;
-    name: string;
-    nameZh: string | null;
-    icon: string | null;
-    subcategories: Subcategory[];
+  interface SyncStatus {
+    running: boolean;
+    source: string | null;
+    stage: string | null;
+    total: number;
+    done: number;
+    percent: number;
+    error: string | null;
+    lastSync: string | null;
   }
 
-  let categories = $state<Category[]>([]);
-  let selectedTechnique = $state<Technique | null>(null);
+  const DIMENSIONS = [
+    { id: "lighting", zh: "光影" },
+    { id: "composition", zh: "构图" },
+    { id: "color", zh: "色彩" },
+    { id: "texture", zh: "质感" },
+    { id: "setting", zh: "场景" },
+    { id: "subject", zh: "主体" },
+    { id: "style", zh: "风格" },
+    { id: "technical", zh: "技术" },
+  ];
+
+  let selectedDim = $state<string | null>(null);
+  let selectedConcept = $state<ConceptDetail | null>(null);
   let searchQuery = $state("");
-  let moodFilter = $state("");
-  let loading = $state(true);
+  let searchMode = $state<"keyword" | "semantic">("keyword");
+  let results = $state<{ subCategory: string; concepts: Concept[] }[]>([]);
+  let loading = $state(false);
   let copied = $state(false);
 
-  const moodMap: Record<string, string> = {
-    dramatic: "戏剧性",
-    peaceful: "宁静",
-    energetic: "活力",
-    mysterious: "神秘",
-    romantic: "浪漫",
-    dark: "暗黑",
-    bright: "明亮",
-    warm: "温暖",
-    cool: "清冷",
-    dreamy: "梦幻",
-    futuristic: "未来感",
-    ethereal: "空灵",
-  };
-
-  onMount(async () => {
-    await loadData();
+  let syncStatus = $state<SyncStatus>({
+    running: false,
+    source: null,
+    stage: null,
+    total: 0,
+    done: 0,
+    percent: 0,
+    error: null,
+    lastSync: null,
   });
 
-  async function loadData() {
+  onMount(() => {
+    loadSyncStatus();
+    loadConcepts();
+    const sse = new EventSource("/api/knowledge/sync/progress");
+    sse.addEventListener("progress", (e) => {
+      syncStatus = JSON.parse(e.data);
+    });
+    sse.addEventListener("status", (e) => {
+      syncStatus = JSON.parse(e.data);
+    });
+    return () => sse.close();
+  });
+
+  async function loadSyncStatus() {
+    const res = await fetch("/api/knowledge/sync/status");
+    if (res.ok) syncStatus = await res.json();
+  }
+
+  async function selectDimension(dim: string | null) {
+    selectedDim = dim;
+    selectedConcept = null;
+    await loadConcepts();
+  }
+
+  async function loadConcepts() {
     loading = true;
     const params = new URLSearchParams();
+    if (selectedDim) params.set("category", selectedDim);
     if (searchQuery) params.set("search", searchQuery);
-    if (moodFilter) params.set("mood", moodFilter);
+    params.set("mode", searchMode);
+
     const res = await fetch(`/api/knowledge?${params}`);
-    if (res.ok) categories = await res.json();
+    if (res.ok) {
+      if (searchMode === "semantic" && searchQuery) {
+        const flat = await res.json();
+        results = [{ subCategory: "搜索结果", concepts: flat }];
+      } else {
+        results = await res.json();
+      }
+    }
     loading = false;
   }
 
-  function copyKeywords(keywords: string) {
-    navigator.clipboard.writeText(keywords);
+  async function selectConcept(name: string) {
+    const res = await fetch(`/api/knowledge/${encodeURIComponent(name)}`);
+    if (res.ok) selectedConcept = await res.json();
+  }
+
+  async function triggerSync(source: "aat" | "wikipedia") {
+    await fetch(`/api/knowledge/sync/${source}`, { method: "POST" });
+  }
+
+  function copyText(text: string) {
+    navigator.clipboard.writeText(text);
     copied = true;
     setTimeout(() => (copied = false), 2000);
   }
-
-  const difficultyMap: Record<string, string> = {
-    beginner: "入门",
-    intermediate: "进阶",
-    advanced: "高级",
-  };
 </script>
 
-<div class="flex h-full">
+<div class="flex h-full flex-col">
+  <!-- 同步栏 -->
   <div
-    class="w-72 shrink-0 border-r border-zinc-800 bg-zinc-900/50 p-4 overflow-y-auto"
+    class="flex items-center gap-3 border-b border-zinc-800 bg-zinc-900/50 px-4 py-2"
   >
-    <h2 class="text-lg font-semibold text-zinc-200 mb-4">艺术知识库</h2>
-
-    <input
-      type="text"
-      placeholder="搜索技法..."
-      bind:value={searchQuery}
-      oninput={() => loadData()}
-      class="w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:border-violet-500 focus:outline-none"
-    />
-
-    <div class="mt-3 flex flex-wrap gap-1.5">
-      <button
-        onclick={() => {
-          moodFilter = "";
-          loadData();
-        }}
-        class="rounded-full px-2.5 py-1 text-xs {!moodFilter
-          ? 'bg-violet-600 text-white'
-          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}">全部</button
+    <span class="text-sm font-medium text-zinc-200">知识库管理</span>
+    <div class="flex-1"></div>
+    {#if syncStatus.lastSync}
+      <span class="text-xs text-zinc-500"
+        >上次同步: {new Date(syncStatus.lastSync).toLocaleString()}</span
       >
-      {#each Object.entries(moodMap) as [key, label]}
+    {/if}
+    <button
+      onclick={() => triggerSync("aat")}
+      disabled={syncStatus.running}
+      class="rounded bg-zinc-800 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"
+      >同步 AAT</button
+    >
+    <button
+      onclick={() => triggerSync("wikipedia")}
+      disabled={syncStatus.running}
+      class="rounded bg-zinc-800 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"
+      >同步 Wikipedia</button
+    >
+  </div>
+
+  <!-- 进度条 -->
+  {#if syncStatus.running}
+    <div class="border-b border-zinc-800 bg-zinc-900/30 px-4 py-1.5">
+      <div class="flex items-center gap-2 text-xs text-zinc-400">
+        <span>正在同步 {syncStatus.source} · {syncStatus.stage}</span>
+        <span class="text-zinc-600">{syncStatus.percent}%</span>
+      </div>
+      <div class="mt-1 h-1 rounded-full bg-zinc-800">
+        <div
+          class="h-1 rounded-full bg-violet-500 transition-all"
+          style="width: {syncStatus.percent}%"
+        ></div>
+      </div>
+    </div>
+  {/if}
+
+  {#if syncStatus.error}
+    <div
+      class="border-b border-red-800 bg-red-900/20 px-4 py-1.5 text-xs text-red-400"
+    >
+      同步失败: {syncStatus.error}
+    </div>
+  {/if}
+
+  <div class="flex flex-1 overflow-hidden">
+    <!-- 左侧：维度 -->
+    <div
+      class="w-48 shrink-0 border-r border-zinc-800 bg-zinc-900/50 overflow-y-auto p-3"
+    >
+      <button
+        onclick={() => selectDimension(null)}
+        class="block w-full rounded px-2.5 py-1.5 text-left text-sm mb-2 {!selectedDim
+          ? 'bg-violet-600/20 text-violet-300'
+          : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}"
+        >全部维度</button
+      >
+
+      {#each DIMENSIONS as dim}
         <button
-          onclick={() => {
-            moodFilter = key;
-            loadData();
-          }}
-          class="rounded-full px-2.5 py-1 text-xs {moodFilter === key
-            ? 'bg-violet-600 text-white'
-            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}">{label}</button
+          onclick={() => selectDimension(dim.id)}
+          class="block w-full rounded px-2.5 py-1.5 text-left text-sm {selectedDim ===
+          dim.id
+            ? 'bg-violet-600/20 text-violet-300'
+            : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}"
+          >{dim.zh}</button
         >
       {/each}
     </div>
 
-    <div class="mt-4 space-y-2">
-      {#each categories as cat}
-        {@const allTechs = cat.subcategories.flatMap((s) => s.techniques)}
-        {#if allTechs.length > 0}
-          <div>
-            <div
-              class="flex items-center gap-2 text-sm font-medium text-zinc-300"
-            >
-              <span>{cat.icon || "●"}</span>
-              <span>{cat.nameZh || cat.name}</span>
-              <span class="text-xs text-zinc-600">({allTechs.length})</span>
+    <!-- 右侧：概念列表 + 详情 -->
+    <div class="flex-1 flex overflow-hidden">
+      <!-- 概念列表 -->
+      <div class="w-80 shrink-0 border-r border-zinc-800 overflow-y-auto p-4">
+        <div class="flex items-center gap-2 mb-3">
+          <input
+            type="text"
+            placeholder="搜索概念..."
+            bind:value={searchQuery}
+            oninput={() => loadConcepts()}
+            class="flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:border-violet-500 focus:outline-none"
+          />
+          <select
+            bind:value={searchMode}
+            onchange={() => searchQuery && loadConcepts()}
+            class="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-300"
+          >
+            <option value="keyword">关键词</option>
+            <option value="semantic">语义</option>
+          </select>
+        </div>
+
+        {#if loading}
+          <div class="text-xs text-zinc-500">加载中...</div>
+        {:else}
+          {#each results as group}
+            <div class="mb-3">
+              <div class="text-xs font-medium text-zinc-500 mb-1">
+                {group.subCategory}
+              </div>
+              {#each group.concepts as c}
+                <button
+                  onclick={() => selectConcept(c.name)}
+                  class="block w-full rounded px-2 py-1.5 text-left text-xs {selectedConcept?.name ===
+                  c.name
+                    ? 'bg-violet-600/20 text-violet-300'
+                    : 'text-zinc-300 hover:bg-zinc-800 hover:text-zinc-200'}"
+                >
+                  <div>{c.nameZh || c.name}</div>
+                  {#if c.score != null}
+                    <div class="text-zinc-600">
+                      {Math.round(c.score * 100)}%
+                    </div>
+                  {/if}
+                </button>
+              {/each}
             </div>
-            <div class="ml-4 mt-1 space-y-0.5">
-              {#each cat.subcategories as sub}
-                {#if sub.techniques.length > 0}
-                  <div class="text-xs text-zinc-500 font-medium mt-1.5">
-                    {sub.nameZh || sub.name}
-                  </div>
-                  {#each sub.techniques as tech}
-                    <button
-                      onclick={() => (selectedTechnique = tech)}
-                      class="block w-full text-left rounded px-2 py-1 text-xs {selectedTechnique?.id ===
-                      tech.id
-                        ? 'bg-violet-600/20 text-violet-300'
-                        : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}"
-                      >{tech.nameZh || tech.name}</button
+          {/each}
+          {#if results.length === 0 && !loading}
+            <div class="text-xs text-zinc-600">暂无结果</div>
+          {/if}
+        {/if}
+      </div>
+
+      <!-- 详情面板 -->
+      <div class="flex-1 overflow-y-auto p-6">
+        {#if selectedConcept}
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <h1 class="text-xl font-bold text-zinc-100">
+                {selectedConcept.nameZh || selectedConcept.name}
+              </h1>
+              <span
+                class="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-500"
+                >{selectedConcept.name}</span
+              >
+              <span
+                class="rounded bg-violet-600/20 px-2 py-0.5 text-xs text-violet-400"
+                >{selectedConcept.source}</span
+              >
+            </div>
+
+            {#if selectedConcept.visualDescription}
+              <div
+                class="mt-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4"
+              >
+                <h3 class="text-sm font-medium text-zinc-300 mb-2">视觉描述</h3>
+                <p class="text-sm text-zinc-400 leading-relaxed">
+                  {selectedConcept.visualDescription}
+                </p>
+              </div>
+            {/if}
+
+            {#if selectedConcept.tags.length > 0}
+              <div
+                class="mt-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4"
+              >
+                <div class="flex items-center justify-between mb-2">
+                  <h3 class="text-sm font-medium text-zinc-300">提示词标签</h3>
+                  <button
+                    onclick={() => copyText(selectedConcept!.tags.join(", "))}
+                    class="rounded bg-violet-600 px-3 py-1 text-xs text-white hover:bg-violet-500"
+                    >{copied ? "已复制!" : "复制全部"}</button
+                  >
+                </div>
+                <div class="flex flex-wrap gap-1.5">
+                  {#each selectedConcept.tags as tag}
+                    <span
+                      class="rounded bg-violet-600/20 px-2 py-0.5 text-xs text-violet-300"
+                      >{tag}</span
                     >
                   {/each}
+                </div>
+                {#if selectedConcept.tagUsage}
+                  <p class="mt-2 text-xs text-zinc-500">
+                    {selectedConcept.tagUsage}
+                  </p>
                 {/if}
-              {/each}
-            </div>
-          </div>
-        {/if}
-      {/each}
-    </div>
-  </div>
+              </div>
+            {/if}
 
-  <div class="flex-1 overflow-y-auto p-6">
-    {#if loading}
-      <div class="text-zinc-500">加载中...</div>
-    {:else if selectedTechnique}
-      <div>
-        <div class="flex items-start justify-between">
-          <div>
-            <h1 class="text-2xl font-bold text-zinc-100">
-              {selectedTechnique.nameZh || selectedTechnique.name}
-            </h1>
-            <p class="mt-1 text-base text-zinc-500">{selectedTechnique.name}</p>
-          </div>
-          {#if selectedTechnique.difficulty}
-            <span
-              class="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-400"
-              >{difficultyMap[selectedTechnique.difficulty] ||
-                selectedTechnique.difficulty}</span
-            >
-          {/if}
-        </div>
-
-        {#if selectedTechnique.description}
-          <div class="mt-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-            <h3 class="text-sm font-medium text-zinc-300 mb-2">说明</h3>
-            <p class="text-sm text-zinc-400 leading-relaxed">
-              {selectedTechnique.description}
-            </p>
-          </div>
-        {/if}
-
-        <div class="mt-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="text-sm font-medium text-zinc-300">正向关键词</h3>
-            <button
-              onclick={() => copyKeywords(selectedTechnique!.promptKeywords)}
-              class="rounded bg-violet-600 px-3 py-1 text-xs text-white hover:bg-violet-500"
-              >{copied ? "已复制!" : "复制"}</button
-            >
-          </div>
-          <div class="flex flex-wrap gap-1.5">
-            {#each selectedTechnique.promptKeywords
-              .split(",")
-              .map((k) => k.trim())
-              .filter(Boolean) as keyword}
-              <span
-                class="rounded bg-violet-600/20 px-2.5 py-1 text-xs text-violet-300"
-                >{keyword}</span
+            {#if selectedConcept.naturalLanguage}
+              <div
+                class="mt-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4"
               >
-            {/each}
-          </div>
-        </div>
+                <div class="flex items-center justify-between mb-2">
+                  <h3 class="text-sm font-medium text-zinc-300">
+                    自然语言描述
+                  </h3>
+                  <button
+                    onclick={() =>
+                      copyText(selectedConcept!.naturalLanguage || "")}
+                    class="rounded bg-violet-600 px-3 py-1 text-xs text-white hover:bg-violet-500"
+                    >复制</button
+                  >
+                </div>
+                <p class="text-sm text-zinc-400 leading-relaxed">
+                  {selectedConcept.naturalLanguage}
+                </p>
+                {#if selectedConcept.nlUsage}
+                  <p class="mt-2 text-xs text-zinc-500">
+                    {selectedConcept.nlUsage}
+                  </p>
+                {/if}
+              </div>
+            {/if}
 
-        {#if selectedTechnique.negativeKeywords}
-          <div class="mt-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-            <h3 class="text-sm font-medium text-zinc-300 mb-2">反向关键词</h3>
-            <div class="flex flex-wrap gap-1.5">
-              {#each selectedTechnique.negativeKeywords
-                .split(",")
-                .map((k) => k.trim())
-                .filter(Boolean) as keyword}
-                <span
-                  class="rounded bg-red-600/20 px-2.5 py-1 text-xs text-red-300"
-                  >{keyword}</span
-                >
-              {/each}
-            </div>
+            {#if selectedConcept.relatedConcepts.length > 0}
+              <div
+                class="mt-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4"
+              >
+                <h3 class="text-sm font-medium text-zinc-300 mb-2">关联概念</h3>
+                <div class="flex flex-wrap gap-1.5">
+                  {#each selectedConcept.relatedConcepts as rel}
+                    <button
+                      onclick={() => selectConcept(rel.name)}
+                      class="rounded bg-zinc-800 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100"
+                      >{rel.nameZh || rel.name}</button
+                    >
+                  {/each}
+                </div>
+              </div>
+            {/if}
           </div>
-        {/if}
-
-        {#if selectedTechnique.moodTags}
-          <div class="mt-4">
-            <h3 class="text-sm font-medium text-zinc-300 mb-2">氛围标签</h3>
-            <div class="flex flex-wrap gap-1.5">
-              {#each selectedTechnique.moodTags
-                .split(",")
-                .map((m) => m.trim())
-                .filter(Boolean) as tag}
-                <span
-                  class="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-400"
-                  >{tag}</span
-                >
-              {/each}
-            </div>
+        {:else}
+          <div class="flex h-full items-center justify-center text-zinc-600">
+            选择左侧维度浏览概念，或搜索查找
           </div>
         {/if}
       </div>
-    {:else}
-      <div class="flex h-full items-center justify-center text-zinc-600">
-        从左侧选择一个技法查看详情
-      </div>
-    {/if}
+    </div>
   </div>
 </div>
