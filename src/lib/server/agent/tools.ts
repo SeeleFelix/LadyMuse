@@ -4,14 +4,16 @@ import { tool } from "ai";
 import { z } from "zod";
 import { db } from "../db";
 import {
-  artTechniques,
-  styles,
+  artConcepts,
+  artPatterns,
+  artReferences,
   prompts,
   keywordStats,
   sessions,
   sessionMessages,
 } from "../db/schema";
 import { eq, like, or, and, desc, sql } from "drizzle-orm";
+import { generateEmbedding, cosineSimilarity } from "../knowledge/embedding";
 import {
   searchModels,
   searchImages,
@@ -22,7 +24,6 @@ import {
 } from "../civitai";
 import { searxngSearch } from "../searxng";
 import { getConfig } from "../config";
-import { getTagsByTopic, type DanbooruTopic } from "../danbooru-sync";
 
 function buildMultiWordFilter(words: string[], fields: any[]) {
   const conditions: any[] = [];
@@ -34,82 +35,6 @@ function buildMultiWordFilter(words: string[], fields: any[]) {
   }
   return or(...conditions);
 }
-
-export const knowledgeSearch = tool({
-  description:
-    '搜索艺术知识库（技法、风格、概念）。当用户提到视觉感觉或需要艺术概念参考时使用。请用简短英文关键词搜索，可以一次传多个词（如 "chiaroscuro dark lighting"）。',
-  inputSchema: z.object({
-    query: z.string().describe("搜索关键词，多个词用空格分隔"),
-    type: z.enum(["technique", "style", "all"]).describe("搜索类型，默认 all"),
-  }),
-  execute: async (params) => {
-    const { query, type = "all" } = params ?? {};
-    if (!query) return "请提供搜索关键词";
-
-    const words = query.split(/\s+/).filter(Boolean);
-    if (words.length === 0) return "请提供搜索关键词";
-
-    const results: any[] = [];
-
-    if (type === "technique" || type === "all") {
-      const techFields = [
-        artTechniques.name,
-        artTechniques.nameZh,
-        artTechniques.promptKeywords,
-        artTechniques.nlDescription,
-        artTechniques.moodTags,
-        artTechniques.tags,
-        artTechniques.description,
-      ];
-      const techs = await db
-        .select()
-        .from(artTechniques)
-        .where(buildMultiWordFilter(words, techFields))
-        .limit(5);
-
-      for (const t of techs) {
-        results.push({
-          type: "technique",
-          name: t.nameZh || t.name,
-          nameEn: t.name,
-          keywords: t.promptKeywords,
-          nlDescription: t.nlDescription,
-          description: t.description?.slice(0, 200),
-          mood: t.moodTags,
-        });
-      }
-    }
-
-    if (type === "style" || type === "all") {
-      const styleFields = [
-        styles.name,
-        styles.nameZh,
-        styles.tags,
-        styles.description,
-        styles.qualityTags,
-      ];
-      const matchedStyles = await db
-        .select()
-        .from(styles)
-        .where(buildMultiWordFilter(words, styleFields))
-        .limit(3);
-
-      for (const s of matchedStyles) {
-        results.push({
-          type: "style",
-          name: s.nameZh || s.name,
-          nameEn: s.name,
-          positiveTemplate: s.positiveTemplate,
-          nlTemplate: s.nlTemplate,
-          negativePrompt: s.negativePrompt,
-          recommendedParams: s.recommendedParams,
-        });
-      }
-    }
-
-    return results.length > 0 ? results : `未找到与"${query}"匹配的结果`;
-  },
-});
 
 export const searchMyPrompts = tool({
   description: "搜索用户历史保存的提示词。查找与当前创作意图相似的历史经验。",
@@ -279,7 +204,7 @@ type PendingTool = {
   resolve: (choice: string) => void;
   reject: (e: Error) => void;
   question: string;
-  options: string[];
+  options: { label: string; text: string }[];
 };
 
 const pendingToolCalls = new Map<string, PendingTool>();
@@ -300,10 +225,13 @@ export const presentOptions = tool({
       .string()
       .describe("问用户的问题，如'哪种光更接近你想要的感觉？'"),
     options: z
-      .array(z.string())
-      .describe(
-        "选项列表，每个用'字母|描述'格式，如'A|惨白的荧光灯，无处躲藏'. 2-4个选项",
-      ),
+      .array(
+        z.object({
+          label: z.string().describe("选项字母，如A/B/C"),
+          text: z.string().describe("选项描述文本，要有画面感"),
+        }),
+      )
+      .describe("2-4个选项"),
   }),
   execute: async ({ question, options }, { toolCallId }) => {
     return new Promise((resolve, reject) => {
@@ -452,71 +380,307 @@ export const webSearch = tool({
   },
 });
 
-export const discoverVisualConcepts = tool({
+export const exploreDimension = tool({
   description:
-    "发现与当前创作主题相关的视觉概念标签。覆盖光影、构图、姿态、色彩、美学风格、背景、手势、景深等。从本地数据库读取 Danbooru 标签数据，用于发现你可能不知道的有用视觉概念。",
+    "浏览一个视觉维度下有哪些艺术概念。当你想了解某个维度（如光影、构图、色彩）有哪些可用概念，或需要确定具体概念名时使用。category 必须是以下之一：lighting/composition/color/texture/setting/subject/style/technical。可选传 subCategory 缩小范围。",
   inputSchema: z.object({
-    topic: z
+    category: z
       .enum([
         "lighting",
         "composition",
-        "posture",
-        "colors",
-        "aesthetic",
-        "background",
-        "gestures",
-        "focus",
+        "color",
+        "texture",
+        "setting",
+        "subject",
+        "style",
+        "technical",
       ])
-      .describe("要探索的视觉概念领域"),
+      .describe("要浏览的维度"),
+    subCategory: z.string().optional().describe("子分类，不传返回整个维度"),
   }),
-  execute: async ({ topic }) => {
-    try {
-      const tags = await getTagsByTopic(topic as DanbooruTopic);
-      if (tags.length === 0) {
-        return {
-          notice: `本地数据库中没有 "${topic}" 的标签数据。请先在管理页面同步 Danbooru 数据。`,
-          topic,
-        };
-      }
+  execute: async ({ category, subCategory }) => {
+    const rows = await db
+      .select({
+        name: artConcepts.name,
+        nameZh: artConcepts.nameZh,
+        subCategory: artConcepts.subCategory,
+      })
+      .from(artConcepts)
+      .where(eq(artConcepts.category, category))
+      .limit(30);
 
-      // Group by section
-      const sections: Record<string, { tags: string[]; topTags: string[] }> =
-        {};
-      for (const tag of tags) {
-        const section = tag.section || "other";
-        if (!sections[section]) {
-          sections[section] = { tags: [], topTags: [] };
-        }
-        sections[section].tags.push(tag.tagName);
-        if (
-          sections[section].topTags.length < 5 &&
-          (tag.postCount ?? 0) > 100
-        ) {
-          sections[section].topTags.push(tag.tagName);
-        }
-      }
+    const filtered = subCategory
+      ? rows.filter((r) => r.subCategory === subCategory)
+      : rows;
 
-      return {
-        topic,
-        totalTags: tags.length,
-        sections: Object.entries(sections).map(([name, data]) => ({
-          section: name,
-          tagCount: data.tags.length,
-          allTags: data.tags,
-          popularTags: data.topTags,
-        })),
-      };
-    } catch (e: any) {
-      return {
-        error: `视觉概念查询失败: ${e.message}`,
-        notice: "请直接基于你的专业知识生成提示词。",
-      };
+    return filtered.map((r) => ({
+      name: r.name,
+      nameZh: r.nameZh,
+      subCategory: r.subCategory,
+    }));
+  },
+});
+
+export const getConcept = tool({
+  description:
+    "获取一个艺术概念的完整信息（视觉效果描述、提示词标签/自然语言用法、关联概念）。给出精确概念名后调用。",
+  inputSchema: z.object({
+    name: z.string().describe("概念英文名或中文名"),
+  }),
+  execute: async ({ name }) => {
+    let rows = await db
+      .select()
+      .from(artConcepts)
+      .where(eq(artConcepts.name, name));
+
+    if (rows.length === 0) {
+      rows = await db
+        .select()
+        .from(artConcepts)
+        .where(eq(artConcepts.nameZh, name));
     }
+
+    if (rows.length === 0) {
+      return `未找到概念 "${name}"。请使用 explore_dimension 浏览相关维度，或 find_concepts 模糊搜索。`;
+    }
+
+    const c = rows[0];
+
+    let relatedDetails: { name: string; nameZh: string | null }[] = [];
+    if (c.relatedConcepts) {
+      const relatedNames = JSON.parse(c.relatedConcepts) as string[];
+      if (relatedNames.length > 0) {
+        relatedDetails = await db
+          .select({ name: artConcepts.name, nameZh: artConcepts.nameZh })
+          .from(artConcepts)
+          .where(or(...relatedNames.map((n) => eq(artConcepts.name, n))))
+          .limit(10);
+      }
+    }
+
+    return {
+      name: c.name,
+      nameZh: c.nameZh,
+      category: c.category,
+      subCategory: c.subCategory,
+      visualDescription: c.visualDescription,
+      tags: c.tags ? JSON.parse(c.tags) : [],
+      tagUsage: c.tagUsage,
+      naturalLanguage: c.naturalLanguage,
+      nlUsage: c.nlUsage,
+      relatedConcepts: relatedDetails,
+      source: c.source,
+    };
+  },
+});
+
+export const findConcepts = tool({
+  description:
+    "用自然语言意图描述搜索匹配的艺术概念。当你不知道确切概念名、只有模糊方向时使用。如用户说'神秘黑暗的感觉'，搜索 matching 的视觉概念。",
+  inputSchema: z.object({
+    intent: z.string().describe("意图描述，如'柔和梦幻的光线'"),
+  }),
+  execute: async ({ intent }) => {
+    const queryEmbedding = await generateEmbedding(intent);
+
+    const all = await db
+      .select({
+        name: artConcepts.name,
+        nameZh: artConcepts.nameZh,
+        category: artConcepts.category,
+        subCategory: artConcepts.subCategory,
+        visualDescription: artConcepts.visualDescription,
+        embedding: artConcepts.embedding,
+      })
+      .from(artConcepts);
+
+    const scored = all
+      .filter((c) => c.embedding)
+      .map((c) => ({
+        name: c.name,
+        nameZh: c.nameZh,
+        category: c.category,
+        subCategory: c.subCategory,
+        snippet: (c.visualDescription || "").slice(0, 150),
+        score: cosineSimilarity(queryEmbedding, JSON.parse(c.embedding!)),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8)
+      .filter((c) => c.score > 0.5);
+
+    if (scored.length === 0) {
+      return "未找到相关概念。建议尝试使用 explore_dimension 浏览相关维度。";
+    }
+
+    return scored;
+  },
+});
+
+export const findPatterns = tool({
+  description:
+    "按意图搜索适用的创作模式。模式告诉你'先放什么后放什么、什么配什么效果好、什么不能一起用'。当用户有了大致方向、需要结构化指导时使用。",
+  inputSchema: z.object({
+    intent: z.string().describe("意图描述，如'暗调情绪感人物肖像'"),
+    concepts: z
+      .array(z.string())
+      .optional()
+      .describe("已知的概念名列表，用于精确匹配"),
+  }),
+  execute: async ({ intent, concepts }) => {
+    const queryEmbedding = await generateEmbedding(intent);
+
+    const all = await db
+      .select({
+        name: artPatterns.name,
+        intent: artPatterns.intent,
+        structureOrder: artPatterns.structureOrder,
+        involvesDimensions: artPatterns.involvesDimensions,
+        involvesConcepts: artPatterns.involvesConcepts,
+        embedding: artPatterns.embedding,
+      })
+      .from(artPatterns);
+
+    const scored = all
+      .filter((p) => p.embedding)
+      .map((p) => {
+        let score = cosineSimilarity(queryEmbedding, JSON.parse(p.embedding!));
+
+        if (concepts && concepts.length > 0 && p.involvesConcepts) {
+          const involved = JSON.parse(p.involvesConcepts) as string[];
+          const overlap = concepts.filter((c) => involved.includes(c)).length;
+          score += overlap * 0.15;
+        }
+
+        return {
+          name: p.name,
+          intent: p.intent,
+          involvesDimensions: p.involvesDimensions
+            ? JSON.parse(p.involvesDimensions)
+            : [],
+          structureOrder: p.structureOrder,
+          score,
+        };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+
+    if (scored.length === 0) {
+      return "未找到匹配的创作模式。可以先用 find_concepts 搜索相关概念，然后尝试直接构建。";
+    }
+
+    return scored;
+  },
+});
+
+export const findReferences = tool({
+  description:
+    "查找验证过的参考案例。按关联概念、模式或意图查找完整的提示词案例及其经验总结。",
+  inputSchema: z.object({
+    concepts: z.array(z.string()).optional().describe("关联的概念名"),
+    pattern: z.string().optional().describe("关联的模式名"),
+    intent: z.string().optional().describe("意图描述"),
+    limit: z.number().optional().describe("返回数量，默认 3"),
+  }),
+  execute: async ({ concepts, pattern, intent, limit = 3 }) => {
+    let results;
+
+    if (concepts?.length || pattern) {
+      const all = await db
+        .select()
+        .from(artReferences)
+        .where(eq(artReferences.verified, 1))
+        .orderBy(desc(artReferences.createdAt))
+        .limit(50);
+
+      const filtered = all.filter((r) => {
+        let match = true;
+        if (concepts?.length && r.appliedConcepts) {
+          const ac = JSON.parse(r.appliedConcepts) as string[];
+          match = concepts.some((c) => ac.includes(c));
+        }
+        if (pattern && r.appliedPattern !== pattern) match = false;
+        return match;
+      });
+
+      if (intent) {
+        const qEmb = await generateEmbedding(intent);
+        results = filtered
+          .filter((r) => r.embedding)
+          .map((r) => ({
+            name: r.name,
+            intent: r.intent,
+            promptPreview: r.positivePrompt.slice(0, 200),
+            params: r.paramsJson ? JSON.parse(r.paramsJson) : null,
+            takeaway: r.takeaway,
+            score: cosineSimilarity(qEmb, JSON.parse(r.embedding!)),
+          }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, limit);
+      } else {
+        results = filtered.slice(0, limit).map((r) => ({
+          name: r.name,
+          intent: r.intent,
+          promptPreview: r.positivePrompt.slice(0, 200),
+          params: r.paramsJson ? JSON.parse(r.paramsJson) : null,
+          takeaway: r.takeaway,
+        }));
+      }
+    } else if (intent) {
+      const qEmb = await generateEmbedding(intent);
+      const all = await db
+        .select()
+        .from(artReferences)
+        .where(eq(artReferences.verified, 1));
+
+      results = all
+        .filter((r) => r.embedding)
+        .map((r) => ({
+          name: r.name,
+          intent: r.intent,
+          promptPreview: r.positivePrompt.slice(0, 200),
+          params: r.paramsJson ? JSON.parse(r.paramsJson) : null,
+          takeaway: r.takeaway,
+          score: cosineSimilarity(qEmb, JSON.parse(r.embedding!)),
+        }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit);
+    } else {
+      const rows = await db
+        .select({
+          name: artReferences.name,
+          intent: artReferences.intent,
+          positivePrompt: artReferences.positivePrompt,
+          paramsJson: artReferences.paramsJson,
+          takeaway: artReferences.takeaway,
+        })
+        .from(artReferences)
+        .where(eq(artReferences.verified, 1))
+        .orderBy(desc(artReferences.createdAt))
+        .limit(limit);
+
+      results = rows.map((r) => ({
+        name: r.name,
+        intent: r.intent,
+        promptPreview: r.positivePrompt.slice(0, 200),
+        params: r.paramsJson ? JSON.parse(r.paramsJson) : null,
+        takeaway: r.takeaway,
+      }));
+    }
+
+    if (!results || results.length === 0) {
+      return "未找到匹配的参考案例。";
+    }
+
+    return results;
   },
 });
 
 const allToolDefinitions = {
-  knowledge_search: knowledgeSearch,
+  explore_dimension: exploreDimension,
+  get_concept: getConcept,
+  find_concepts: findConcepts,
+  find_patterns: findPatterns,
+  find_references: findReferences,
   search_my_prompts: searchMyPrompts,
   save_prompt: savePrompt,
   get_user_profile: getUserProfile,
@@ -526,7 +690,6 @@ const allToolDefinitions = {
   search_civitai_models: searchCivitaiModels,
   search_civitai_prompts: searchCivitaiPrompts,
   search_civitai_tags: searchCivitaiTags,
-  discover_visual_concepts: discoverVisualConcepts,
   web_search: webSearch,
 };
 
