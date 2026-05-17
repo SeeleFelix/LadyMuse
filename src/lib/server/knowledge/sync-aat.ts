@@ -5,7 +5,9 @@ import {
   readdirSync,
   statSync,
   mkdirSync,
+  unlinkSync,
 } from "fs";
+import { finished } from "stream/promises";
 import { createInterface } from "readline";
 import { db } from "../db";
 import { artConcepts } from "../db/schema";
@@ -86,9 +88,14 @@ async function downloadZip(): Promise<string> {
   const dateStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   const zipPath = `${DATA_DIR}/aat_full_${dateStr}.zip`;
 
-  if (existsSync(zipPath)) {
+  if (existsSync(zipPath) && statSync(zipPath).size > 0) {
     console.log("[sync-aat] Using cached", zipPath);
     return zipPath;
+  }
+
+  // Remove empty/partial file from previous failed attempt
+  if (existsSync(zipPath) && statSync(zipPath).size === 0) {
+    unlinkSync(zipPath);
   }
 
   console.log("[sync-aat] Downloading AAT ZIP...");
@@ -103,7 +110,12 @@ async function downloadZip(): Promise<string> {
     fileStream.write(Buffer.from(value));
   }
   fileStream.end();
-  console.log("[sync-aat] Downloaded to", zipPath);
+  await finished(fileStream);
+  console.log(
+    "[sync-aat] Downloaded to",
+    zipPath,
+    `(${statSync(zipPath).size} bytes)`,
+  );
   return zipPath;
 }
 
