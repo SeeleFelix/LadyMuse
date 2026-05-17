@@ -329,3 +329,59 @@ export const usageLogs = sqliteTable("usage_logs", {
   metadata: text("metadata"),
   createdAt: text("created_at").default("(datetime('now'))"),
 });
+
+// 知识库 — 概念
+export const artConcepts = sqliteTable("art_concepts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  nameZh: text("name_zh"),
+  category: text("category").notNull(),
+  subCategory: text("sub_category"),
+  visualDescription: text("visual_description"),
+  tags: text("tags"),
+  tagUsage: text("tag_usage"),
+  naturalLanguage: text("natural_language"),
+  nlUsage: text("nl_usage"),
+  relatedConcepts: text("related_concepts"),
+  source: text("source").notNull().default("manual"),
+  sourceId: text("source_id"),
+  qualityVerified: integer("quality_verified").default(0),
+  embedding: text("embedding"),
+  createdAt: text("created_at").default("(datetime('now'))"),
+  updatedAt: text("updated_at").default("(datetime('now'))"),
+});
+
+// 知识库 — 模式
+export const artPatterns = sqliteTable("art_patterns", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  intent: text("intent"),
+  structureOrder: text("structure_order"),
+  compositionRules: text("composition_rules"),
+  conflicts: text("conflicts"),
+  involvesDimensions: text("involves_dimensions"),
+  involvesConcepts: text("involves_concepts"),
+  embedding: text("embedding"),
+  qualityVerified: integer("quality_verified").default(0),
+  createdAt: text("created_at").default("(datetime('now'))"),
+  updatedAt: text("updated_at").default("(datetime('now'))"),
+});
+
+// 知识库 — 参考
+export const artReferences = sqliteTable("art_references", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  intent: text("intent"),
+  positivePrompt: text("positive_prompt").notNull(),
+  negativePrompt: text("negative_prompt"),
+  paramsJson: text("params_json"),
+  appliedConcepts: text("applied_concepts"),
+  appliedPattern: text("applied_pattern"),
+  deviations: text("deviations"),
+  takeaway: text("takeaway"),
+  verified: integer("verified").default(0),
+  source: text("source").default("manual"),
+  embedding: text("embedding"),
+  createdAt: text("created_at").default("(datetime('now'))"),
+  updatedAt: text("updated_at").default("(datetime('now'))"),
+});
