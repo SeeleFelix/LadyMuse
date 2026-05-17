@@ -5,18 +5,29 @@ import {
 } from "$lib/server/knowledge/sync-status";
 
 export const GET: RequestHandler = async ({ request }) => {
+  let closed = false;
   const stream = new ReadableStream({
     start(controller) {
       const send = (data: string) => {
-        controller.enqueue(new TextEncoder().encode(data));
+        if (closed) return;
+        try {
+          controller.enqueue(new TextEncoder().encode(data));
+        } catch {
+          cleanup();
+        }
+      };
+
+      const cleanup = () => {
+        if (closed) return;
+        closed = true;
+        removeSSEClient(send);
+        try {
+          controller.close();
+        } catch {}
       };
 
       addSSEClient(send);
-
-      request.signal.addEventListener("abort", () => {
-        removeSSEClient(send);
-        controller.close();
-      });
+      request.signal.addEventListener("abort", cleanup);
     },
   });
 
