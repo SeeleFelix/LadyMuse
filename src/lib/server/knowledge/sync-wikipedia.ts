@@ -206,6 +206,8 @@ export async function syncWikipedia(): Promise<{
       updateProgress({ done: ci + 1 });
     }
 
+    updateProgress({ stage: "importing" });
+
     // 批量生成 embedding（仅处理本次同步涉及的条目）
     if (embeddingTargets.length > 0) {
       updateProgress({ stage: "embedding" });
