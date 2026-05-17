@@ -280,29 +280,29 @@ function buildHierarchyPath(
   return parts;
 }
 
-// Map AAT hierarchy branch to our dimension.
-// Match by level-2 (hierarchy name) and level-3 labels.
+// Map AAT hierarchy branch labels to our dimensions.
+// AAT hierarchy names have "(hierarchy name)" suffix in the actual data.
 const BRANCH_MAP: Record<string, string> = {
   // Physical Attributes Facet
-  Color: "color",
-  "Design Elements": "composition",
-  "Attributes and Properties": "texture",
-  "Conditions and Effects": "lighting",
+  "Color (hierarchy name)": "color",
+  "Design Elements (hierarchy name)": "composition",
+  "Attributes and Properties (hierarchy name)": "texture",
+  "Conditions and Effects (hierarchy name)": "lighting",
   // Activities Facet
-  "Processes and Techniques": "technical",
-  Disciplines: "technical",
+  "Processes and Techniques (hierarchy name)": "technical",
+  "Disciplines (hierarchy name)": "technical",
   // Objects Facet
-  "Built Environment": "setting",
-  "Settlements and Landscapes": "setting",
-  "Visual and Verbal Communication": "style",
-  "Object Genres": "style",
+  "Built Environment (hierarchy name)": "setting",
+  "Settlements and Landscapes (hierarchy name)": "setting",
+  "Visual and Verbal Communication (hierarchy name)": "style",
+  "Object Genres (hierarchy name)": "style",
   // Agents Facet
-  "Living Organisms": "subject",
+  "Living Organisms (hierarchy name)": "subject",
   // Materials Facet
-  Materials: "texture",
+  "Materials (hierarchy name)": "texture",
   // Styles and Periods Facet
-  "Styles and Periods": "style",
-  // Associated Concepts — deeper branches
+  "Styles and Periods (hierarchy name)": "style",
+  // Associated Concepts — deeper branches (no suffix)
   "light-related concepts": "lighting",
   "form and composition concepts": "composition",
   "texture (artistic concept)": "texture",
