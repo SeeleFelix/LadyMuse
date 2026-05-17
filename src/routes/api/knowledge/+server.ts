@@ -14,6 +14,8 @@ export const GET: RequestHandler = async ({ url }) => {
   const search = url.searchParams.get("search");
   const mode = url.searchParams.get("mode") || "keyword";
   const subCategory = url.searchParams.get("subCategory");
+  const limit = parseInt(url.searchParams.get("limit") || "500");
+  const offset = parseInt(url.searchParams.get("offset") || "0");
 
   if (mode === "semantic" && search) {
     const queryEmbedding = await generateEmbedding(search);
@@ -91,9 +93,16 @@ export const GET: RequestHandler = async ({ url }) => {
   const query_ =
     conditions.length > 0 ? baseQuery.where(and(...conditions)) : baseQuery;
 
+  // Get total count for pagination
+  const [countRow] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(artConcepts)
+    .where(conditions.length > 0 ? and(...conditions) : undefined);
+
   const rows = await query_
     .orderBy(artConcepts.category, artConcepts.subCategory, artConcepts.name)
-    .limit(100);
+    .limit(limit)
+    .offset(offset);
 
   const grouped: Record<string, typeof rows> = {};
   for (const r of rows) {
@@ -102,8 +111,9 @@ export const GET: RequestHandler = async ({ url }) => {
     grouped[sub].push(r);
   }
 
-  return json(
-    Object.entries(grouped).map(([sub, items]) => ({
+  return json({
+    total: countRow?.count ?? 0,
+    groups: Object.entries(grouped).map(([sub, items]) => ({
       subCategory: sub,
       concepts: items.map((r) => ({
         name: r.name,
@@ -115,7 +125,7 @@ export const GET: RequestHandler = async ({ url }) => {
         hasEmbedding: r.embedding ? 1 : 0,
       })),
     })),
-  );
+  });
 };
 
 export const DELETE: RequestHandler = async () => {

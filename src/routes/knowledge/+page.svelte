@@ -54,6 +54,8 @@
   let searchQuery = $state("");
   let searchMode = $state<"keyword" | "semantic">("keyword");
   let results = $state<{ subCategory: string; concepts: Concept[] }[]>([]);
+  let totalResults = $state(0);
+  let currentOffset = $state(0);
   let loading = $state(false);
   let copied = $state(false);
   let showClearConfirm = $state(false);
@@ -113,15 +115,19 @@
   async function selectDimension(dim: string | null) {
     selectedDim = dim;
     selectedConcept = null;
+    currentOffset = 0;
+    results = [];
     await loadConcepts();
   }
 
-  async function loadConcepts() {
+  async function loadConcepts(append = false) {
     loading = true;
     const params = new URLSearchParams();
     if (selectedDim) params.set("category", selectedDim);
     if (searchQuery) params.set("search", searchQuery);
     params.set("mode", searchMode);
+    params.set("limit", "500");
+    params.set("offset", String(currentOffset));
 
     const res = await fetch(`/api/knowledge?${params}`);
     if (res.ok) {
@@ -129,10 +135,29 @@
         const flat = await res.json();
         results = [{ subCategory: "搜索结果", concepts: flat }];
       } else {
-        results = await res.json();
+        const data = await res.json();
+        totalResults = data.total;
+        if (append) {
+          // Merge groups
+          for (const g of data.groups) {
+            const existing = results.find(
+              (r) => r.subCategory === g.subCategory,
+            );
+            if (existing) existing.concepts.push(...g.concepts);
+            else results.push(g);
+          }
+          results = [...results];
+        } else {
+          results = data.groups;
+        }
       }
     }
     loading = false;
+  }
+
+  function loadMore() {
+    currentOffset += 500;
+    loadConcepts(true);
   }
 
   async function selectConcept(name: string) {
@@ -275,7 +300,11 @@
             type="text"
             placeholder="搜索概念..."
             bind:value={searchQuery}
-            oninput={() => loadConcepts()}
+            oninput={() => {
+              currentOffset = 0;
+              results = [];
+              loadConcepts();
+            }}
             class="flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:border-violet-500 focus:outline-none"
           />
           <select
@@ -324,6 +353,14 @@
           {/each}
           {#if results.length === 0 && !loading}
             <div class="text-xs text-zinc-600">暂无结果</div>
+          {/if}
+          {#if totalResults > currentOffset + 500}
+            <button
+              onclick={loadMore}
+              disabled={loading}
+              class="mt-2 w-full rounded bg-zinc-800 py-1.5 text-xs text-zinc-400 hover:bg-zinc-700 disabled:opacity-50"
+              >加载更多（{totalResults - currentOffset - 500} 条剩余）</button
+            >
           {/if}
         {/if}
       </div>
