@@ -291,9 +291,11 @@ const BRANCH_MAP: Record<string, string> = {
   // Activities Facet
   "Processes and Techniques (hierarchy name)": "technical",
   "Disciplines (hierarchy name)": "technical",
+  "Functions (hierarchy name)": "technical",
   // Objects Facet
   "Built Environment (hierarchy name)": "setting",
   "Settlements and Landscapes (hierarchy name)": "setting",
+  "Furnishings and Equipment (hierarchy name)": "setting",
   "Visual and Verbal Communication (hierarchy name)": "style",
   "Object Genres (hierarchy name)": "style",
   // Agents Facet
