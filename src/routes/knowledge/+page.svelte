@@ -54,6 +54,7 @@
   let results = $state<{ subCategory: string; concepts: Concept[] }[]>([]);
   let loading = $state(false);
   let copied = $state(false);
+  let showClearConfirm = $state(false);
 
   let syncStatus = $state<SyncStatus>({
     running: false,
@@ -118,6 +119,12 @@
     await fetch(`/api/knowledge/sync/${source}`, { method: "POST" });
   }
 
+  async function clearAllData() {
+    await fetch("/api/knowledge", { method: "DELETE" });
+    showClearConfirm = false;
+    location.reload();
+  }
+
   function copyText(text: string) {
     navigator.clipboard.writeText(text);
     copied = true;
@@ -150,11 +157,7 @@
       >同步 Wikipedia</button
     >
     <button
-      onclick={async () => {
-        if (!confirm("确认清空全部知识库数据？此操作不可撤销。")) return;
-        await fetch("/api/knowledge", { method: "DELETE" });
-        location.reload();
-      }}
+      onclick={() => (showClearConfirm = true)}
       disabled={syncStatus.running}
       class="rounded bg-red-900/30 px-3 py-1 text-xs text-red-400 hover:bg-red-900/50 disabled:opacity-50"
       >清空数据</button
@@ -373,3 +376,37 @@
     </div>
   </div>
 </div>
+
+{#if showClearConfirm}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center"
+    role="dialog"
+  >
+    <!-- 遮罩 -->
+    <div
+      class="absolute inset-0 bg-black/70"
+      onclick={() => (showClearConfirm = false)}
+    ></div>
+    <!-- 弹窗 -->
+    <div
+      class="relative w-96 rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl"
+    >
+      <h3 class="text-sm font-semibold text-zinc-100">确认清空数据</h3>
+      <p class="mt-2 text-sm text-zinc-400">
+        将删除 <span class="text-zinc-200 font-medium">全部</span> 概念、模式和参考数据。此操作不可撤销。
+      </p>
+      <div class="mt-6 flex justify-end gap-3">
+        <button
+          onclick={() => (showClearConfirm = false)}
+          class="rounded-lg bg-zinc-800 px-4 py-2 text-xs text-zinc-300 hover:bg-zinc-700"
+          >取消</button
+        >
+        <button
+          onclick={clearAllData}
+          class="rounded-lg bg-red-600 px-4 py-2 text-xs text-white hover:bg-red-500"
+          >确认清空</button
+        >
+      </div>
+    </div>
+  </div>
+{/if}
