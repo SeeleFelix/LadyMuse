@@ -136,7 +136,11 @@ function streamNtriples(): Promise<{
         return;
       }
 
-      if (t.p === RDF_VALUE && t.oType === "literal") {
+      if (
+        t.p === RDF_VALUE &&
+        t.oType === "literal" &&
+        t.s.includes("scopeNote")
+      ) {
         const [text] = t.o.split("\0");
         scopeNotes.set(t.s, text);
         return;
