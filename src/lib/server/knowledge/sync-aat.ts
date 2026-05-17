@@ -266,7 +266,7 @@ function parseNtFile(ntPath: string): Map<string, RawConcept> {
 function buildHierarchyPath(
   uri: string,
   concepts: Map<string, RawConcept>,
-): string {
+): string[] {
   const parts: string[] = [];
   const visited = new Set<string>();
   let current = uri;
@@ -278,35 +278,51 @@ function buildHierarchyPath(
     if (label) parts.unshift(label);
     current = rec.broader[0] || "";
   }
-  return parts.join(" > ");
+  return parts;
 }
 
-function mapToDimension(path: string): string {
-  const p = path.toLowerCase();
-  if (p.includes("light")) return "lighting";
-  if (p.includes("composit") || p.includes("perspective")) return "composition";
-  if (p.includes("color")) return "color";
-  if (p.includes("texture")) return "texture";
-  if (
-    p.includes("built environment") ||
-    p.includes("settlement") ||
-    p.includes("landscape") ||
-    p.includes("architecture")
-  )
-    return "setting";
-  if (p.includes("styles and periods") || p.includes("style")) return "style";
-  if (
-    p.includes("processes and techniques") ||
-    p.includes("technique") ||
-    p.includes("activity")
-  )
-    return "technical";
+// Map AAT hierarchy branch to our dimension.
+// Match by level-2 (hierarchy name) and level-3 labels.
+const BRANCH_MAP: Record<string, string> = {
+  // Physical Attributes Facet
+  Color: "color",
+  "Design Elements": "composition",
+  "Attributes and Properties": "texture",
+  "Conditions and Effects": "lighting",
+  // Activities Facet
+  "Processes and Techniques": "technical",
+  Disciplines: "technical",
+  // Objects Facet
+  "Built Environment": "setting",
+  "Settlements and Landscapes": "setting",
+  "Visual and Verbal Communication": "style",
+  "Object Genres": "style",
+  // Agents Facet
+  "Living Organisms": "subject",
+  // Materials Facet
+  Materials: "texture",
+  // Styles and Periods Facet
+  "Styles and Periods": "style",
+  // Associated Concepts — deeper branches
+  "light-related concepts": "lighting",
+  "form and composition concepts": "composition",
+  "texture (artistic concept)": "texture",
+  "human figure-related concepts": "subject",
+  "color-related concepts": "color",
+  "artistic concepts": "style",
+};
+
+function mapToDimension(pathLabels: string[]): string {
+  // Check each level in the path against known branches
+  for (const label of pathLabels) {
+    const dim = BRANCH_MAP[label];
+    if (dim) return dim;
+  }
   return "other";
 }
 
-function subCategory(path: string): string {
-  const parts = path.split(" > ");
-  return parts[parts.length - 1] || "";
+function subCategory(pathLabels: string[]): string {
+  return pathLabels[pathLabels.length - 1] || "";
 }
 
 function resolveRelatedName(
