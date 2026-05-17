@@ -1,63 +1,116 @@
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 import { db } from "$lib/server/db";
+import { artConcepts } from "$lib/server/db/schema";
+import { eq, like, or, and, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import {
-  artCategories,
-  artSubcategories,
-  artTechniques,
-} from "$lib/server/db/schema";
-import { eq, sql } from "drizzle-orm";
+  generateEmbedding,
+  cosineSimilarity,
+} from "$lib/server/knowledge/embedding";
 
 export const GET: RequestHandler = async ({ url }) => {
+  const category = url.searchParams.get("category");
   const search = url.searchParams.get("search");
-  const mood = url.searchParams.get("mood");
+  const mode = url.searchParams.get("mode") || "keyword";
+  const subCategory = url.searchParams.get("subCategory");
 
-  // Get full hierarchy
-  const categories = await db
-    .select()
-    .from(artCategories)
-    .orderBy(artCategories.sortOrder);
+  if (mode === "semantic" && search) {
+    const queryEmbedding = await generateEmbedding(search);
 
-  const subcategories = await db
-    .select()
-    .from(artSubcategories)
-    .orderBy(artSubcategories.sortOrder);
+    const conditions_semantic: SQL[] = [];
+    if (category) {
+      conditions_semantic.push(eq(artConcepts.category, category));
+    }
 
-  let techniques = await db
-    .select()
-    .from(artTechniques)
-    .orderBy(artTechniques.sortOrder);
+    const baseQuery = db
+      .select({
+        name: artConcepts.name,
+        nameZh: artConcepts.nameZh,
+        category: artConcepts.category,
+        subCategory: artConcepts.subCategory,
+        visualDescription: artConcepts.visualDescription,
+        embedding: artConcepts.embedding,
+      })
+      .from(artConcepts);
 
-  // Filter by mood tags
-  if (mood) {
-    techniques = techniques.filter((t) =>
-      t.moodTags?.toLowerCase().includes(mood.toLowerCase()),
-    );
+    const all = await (conditions_semantic.length > 0
+      ? baseQuery.where(and(...conditions_semantic))
+      : baseQuery);
+
+    const results = all
+      .filter((c) => c.embedding)
+      .map((c) => ({
+        name: c.name,
+        nameZh: c.nameZh,
+        category: c.category,
+        subCategory: c.subCategory,
+        snippet: (c.visualDescription || "").slice(0, 150),
+        score: cosineSimilarity(queryEmbedding, JSON.parse(c.embedding!)),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .filter((c) => c.score > 0.5)
+      .slice(0, 20);
+
+    return json(results);
   }
 
-  // Filter by search
+  const conditions: SQL[] = [];
+  if (category) {
+    conditions.push(eq(artConcepts.category, category));
+  }
+  if (subCategory) {
+    conditions.push(eq(artConcepts.subCategory, subCategory));
+  }
   if (search) {
-    const q = search.toLowerCase();
-    techniques = techniques.filter(
-      (t) =>
-        t.name.toLowerCase().includes(q) ||
-        t.nameZh?.toLowerCase().includes(q) ||
-        t.description?.toLowerCase().includes(q) ||
-        t.promptKeywords.toLowerCase().includes(q) ||
-        t.tags?.toLowerCase().includes(q),
+    const q = `%${search}%`;
+    const searchOr = or(
+      like(artConcepts.name, q),
+      like(artConcepts.nameZh, q),
+      like(artConcepts.visualDescription, q),
+      like(artConcepts.tags, q),
     );
+    if (searchOr) {
+      conditions.push(searchOr);
+    }
   }
 
-  // Group subcategories under categories
-  const result = categories.map((cat) => ({
-    ...cat,
-    subcategories: subcategories
-      .filter((sub) => sub.categoryId === cat.id)
-      .map((sub) => ({
-        ...sub,
-        techniques: techniques.filter((t) => t.subcategoryId === sub.id),
-      })),
-  }));
+  const baseQuery = db
+    .select({
+      name: artConcepts.name,
+      nameZh: artConcepts.nameZh,
+      category: artConcepts.category,
+      subCategory: artConcepts.subCategory,
+      visualDescription: artConcepts.visualDescription,
+      tags: artConcepts.tags,
+    })
+    .from(artConcepts);
 
-  return json(result);
+  const query_ =
+    conditions.length > 0 ? baseQuery.where(and(...conditions)) : baseQuery;
+
+  const rows = await query_
+    .orderBy(artConcepts.category, artConcepts.subCategory, artConcepts.name)
+    .limit(100);
+
+  const grouped: Record<string, typeof rows> = {};
+  for (const r of rows) {
+    const sub = r.subCategory || "other";
+    if (!grouped[sub]) grouped[sub] = [];
+    grouped[sub].push(r);
+  }
+
+  return json(
+    Object.entries(grouped).map(([sub, items]) => ({
+      subCategory: sub,
+      concepts: items.map((r) => ({
+        name: r.name,
+        nameZh: r.nameZh,
+        category: r.category,
+        subCategory: r.subCategory,
+        snippet: (r.visualDescription || "").slice(0, 150),
+        tags: r.tags ? JSON.parse(r.tags) : [],
+      })),
+    })),
+  );
 };
