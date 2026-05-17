@@ -151,6 +151,7 @@
     >
     <button
       onclick={async () => {
+        if (!confirm("确认清空全部知识库数据？此操作不可撤销。")) return;
         await fetch("/api/knowledge", { method: "DELETE" });
         location.reload();
       }}
