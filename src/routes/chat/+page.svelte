@@ -17,7 +17,7 @@
     toolDetail?: string;
     options?: {
       question: string;
-      options: string[];
+      options: { label: string; text: string }[];
       choice?: string;
     };
     toolCallId?: string;
@@ -72,6 +72,7 @@
   let optionsDisabled = $state(false);
   let customInputIdx = $state(-1);
   let customInputText = $state("");
+  let savedMessageIndices = new Set<number>();
 
   let agentModules = $state<
     { file: string; enabled: boolean; exclusive_group?: string }[]
@@ -311,17 +312,17 @@
     }
   }
 
-  async function selectOption(idx: number, desc: string) {
+  async function selectOption(idx: number, label: string) {
     if (optionsDisabled) return;
     const msg = messages[idx];
     if (!msg.toolCallId || !msg.options) return;
 
-    msg.options.choice = desc;
-    msg.content = `${msg.options.question} → ${desc}`;
+    msg.options.choice = label;
+    msg.content = `${msg.options.question} → ${label}`;
     msg.toolDetail = JSON.stringify({
       name: "present_options",
       input: { question: msg.options.question, options: msg.options.options },
-      choice: desc,
+      choice: label,
     });
     optionsDisabled = true;
     customInputIdx = -1;
@@ -332,14 +333,21 @@
       const res = await fetch("/api/studio/resolve-tool", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ toolCallId: msg.toolCallId, choice: desc }),
+        body: JSON.stringify({ toolCallId: msg.toolCallId, choice: label }),
       });
       if (!res.ok) {
         console.error("[selectOption] resolve failed:", res.status);
+        optionsDisabled = false;
+        messages = [...messages];
       }
     } catch (e) {
       console.error("[selectOption] fetch failed:", e);
+      optionsDisabled = false;
+      messages = [...messages];
     }
+
+    await appendToSession(msg.role, msg.content, msg.toolDetail);
+    savedMessageIndices.add(idx);
   }
 
   async function sendMessage() {
@@ -520,6 +528,10 @@
     }
 
     for (let i = newMsgStart; i < messages.length; i++) {
+      if (savedMessageIndices.has(i)) {
+        savedMessageIndices.delete(i);
+        continue;
+      }
       const msg = messages[i];
       if (msg.content && msg.content.trim()) {
         let usageJson: string | undefined;
@@ -1024,11 +1036,9 @@
                   {msg.options.question}
                 </p>
                 {#each msg.options.options as opt}
-                  {@const parts = opt.split("|")}
-                  {@const desc = parts.slice(1).join("|")}
-                  {@const isSelected = msg.options.choice === desc}
+                  {@const isSelected = msg.options.choice === opt.label}
                   <button
-                    onclick={() => selectOption(i, desc)}
+                    onclick={() => selectOption(i, opt.label)}
                     disabled={isSelected || optionsDisabled || !msg.toolCallId}
                     class="w-full px-4 py-2.5 text-left text-sm border-t border-zinc-800 transition-colors
                       {isSelected
@@ -1036,13 +1046,22 @@
                       : 'text-zinc-400 hover:bg-zinc-800/50'}
                       disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <span class="font-medium text-violet-400">{parts[0]}</span>
-                    <span class="ml-2">{desc}</span>
+                    <span class="font-medium text-violet-400">{opt.label}</span>
+                    <span class="ml-2">{opt.text}</span>
                     {#if isSelected}
                       <span class="ml-auto text-violet-400">✓</span>
                     {/if}
                   </button>
                 {/each}
+                {#if msg.options.choice && !msg.options.options.some((opt) => opt.label === msg.options.choice)}
+                  <div
+                    class="px-4 py-2.5 text-sm border-t border-zinc-800 bg-violet-600/20 border-l-2 border-l-violet-500 text-violet-300 flex items-center"
+                  >
+                    <span class="font-medium text-violet-400">你的想法</span>
+                    <span class="ml-2">{msg.options.choice}</span>
+                    <span class="ml-auto text-violet-400">✓</span>
+                  </div>
+                {/if}
                 {#if customInputIdx === i}
                   <div class="flex gap-2 px-4 py-2 border-t border-zinc-800">
                     <input
@@ -1051,7 +1070,8 @@
                       placeholder="输入你的想法..."
                       class="flex-1 rounded border border-violet-500/50 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-500 focus:border-violet-500 focus:outline-none"
                       onkeydown={(e) => {
-                        if (e.key === "Enter") selectOption(i, customInputText);
+                        if (e.key === "Enter" && customInputText.trim())
+                          selectOption(i, customInputText);
                       }}
                     />
                     <button
