@@ -1,6 +1,6 @@
 export interface SyncStatusData {
   running: boolean;
-  source: "aat" | "wikipedia" | null;
+  source: "aat" | "wikipedia" | "embedding" | null;
   stage: "downloading" | "parsing" | "importing" | "embedding" | null;
   total: number;
   done: number;
@@ -26,7 +26,7 @@ export function getSyncStatus(): SyncStatusData {
   return { ...status };
 }
 
-export function startSync(source: "aat" | "wikipedia"): boolean {
+export function startSync(source: "aat" | "wikipedia" | "embedding"): boolean {
   if (status.running) return false;
   status.running = true;
   status.source = source;
