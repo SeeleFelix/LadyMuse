@@ -52,14 +52,6 @@ function extractSubject(line: string): string | null {
   return line.slice(1, end);
 }
 
-function extractPredicate(line: string): string {
-  const start = line.indexOf("<", 1);
-  if (start === -1) return "";
-  const end = line.indexOf(">", start);
-  if (end === -1) return "";
-  return line.slice(start + 1, end);
-}
-
 function extractObject(line: string): { text: string; isUri: boolean } | null {
   // Find the object part — starts after the second ">"
   let gtCount = 0;
@@ -210,16 +202,13 @@ function parseNtFile(ntPath: string): Map<string, RawConcept> {
       const subj = extractSubject(line);
       if (!subj || !subj.includes("/aat/3")) continue;
 
-      const pred = extractPredicate(line);
-
-      if (pred === P_RDF_TYPE && line.includes(O_GVP_CONCEPT)) {
+      if (line.includes(P_RDF_TYPE) && line.includes(O_GVP_CONCEPT)) {
         getOrCreate(subj).ok = true;
-      } else if (pred === P_SKOS_INS && line.includes(O_AAT_SCHEME)) {
+      } else if (line.includes(P_SKOS_INS) && line.includes(O_AAT_SCHEME)) {
         getOrCreate(subj).ok = true;
-      } else if (pred === P_RDFS_LABEL) {
+      } else if (line.includes(P_RDFS_LABEL)) {
         const obj = extractObject(line);
         if (!obj || obj.isUri) continue;
-        // Check language in raw line
         const langIdx = line.lastIndexOf("@");
         const lang =
           langIdx > 0 ? line.slice(langIdx + 1, line.lastIndexOf(" ")) : "";
@@ -232,13 +221,13 @@ function parseNtFile(ntPath: string): Map<string, RawConcept> {
         ) {
           rec.zh = obj.text;
         }
-      } else if (pred === P_SKOS_SN) {
+      } else if (line.includes(P_SKOS_SN)) {
         const obj = extractObject(line);
         if (obj && obj.isUri) getOrCreate(subj).sn.push(obj.text);
-      } else if (pred === P_GVP_BP) {
+      } else if (line.includes(P_GVP_BP)) {
         const obj = extractObject(line);
         if (obj && obj.isUri) getOrCreate(subj).broader.push(obj.text);
-      } else if (pred === P_SKOS_REL) {
+      } else if (line.includes(P_SKOS_REL)) {
         const obj = extractObject(line);
         if (obj && obj.isUri) getOrCreate(subj).related.push(obj.text);
       }
