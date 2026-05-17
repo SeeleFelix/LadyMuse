@@ -29,7 +29,7 @@ const AAT_HIERARCHY_MAPPING: Record<string, string> = {
   "Activities Facet > Processes and Techniques": "technical",
 };
 
-const AAT_FULL_URL = "https://vocab.getty.edu/dataset/aat/full.zip";
+const AAT_FULL_URL = "http://aatdownloads.getty.edu/VocabData/full.zip";
 
 const PREF_LABEL = "http://www.w3.org/2004/02/skos/core#prefLabel";
 const SCOPE_NOTE = "http://www.w3.org/2004/02/skos/core#scopeNote";
