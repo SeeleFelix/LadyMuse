@@ -149,6 +149,15 @@
       class="rounded bg-zinc-800 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"
       >同步 Wikipedia</button
     >
+    <button
+      onclick={async () => {
+        await fetch("/api/knowledge", { method: "DELETE" });
+        location.reload();
+      }}
+      disabled={syncStatus.running}
+      class="rounded bg-red-900/30 px-3 py-1 text-xs text-red-400 hover:bg-red-900/50 disabled:opacity-50"
+      >清空数据</button
+    >
   </div>
 
   <!-- 进度条 -->

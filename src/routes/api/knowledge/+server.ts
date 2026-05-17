@@ -1,7 +1,7 @@
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 import { db } from "$lib/server/db";
-import { artConcepts } from "$lib/server/db/schema";
+import { artConcepts, artPatterns, artReferences } from "$lib/server/db/schema";
 import { eq, like, or, and, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
@@ -113,4 +113,11 @@ export const GET: RequestHandler = async ({ url }) => {
       })),
     })),
   );
+};
+
+export const DELETE: RequestHandler = async () => {
+  await db.delete(artReferences);
+  await db.delete(artPatterns);
+  await db.delete(artConcepts);
+  return json({ ok: true });
 };
