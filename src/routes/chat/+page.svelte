@@ -105,7 +105,11 @@
   );
 
   const TOOL_NAMES: Record<string, string> = {
-    knowledge_search: "搜索知识库",
+    explore_dimension: "知识库 · 浏览维度",
+    get_concept: "知识库 · 查看概念",
+    find_concepts: "知识库 · 搜索概念",
+    find_patterns: "知识库 · 匹配模式",
+    find_references: "知识库 · 查找参考",
     search_my_prompts: "搜索历史提示词",
     save_prompt: "保存提示词",
     get_user_profile: "获取用户画像",
@@ -615,7 +619,11 @@
   };
 
   const TOOL_LABELS: Record<string, string> = {
-    knowledge_search: "知识库搜索",
+    explore_dimension: "知识库 · 浏览维度",
+    get_concept: "知识库 · 查看概念",
+    find_concepts: "知识库 · 搜索概念",
+    find_patterns: "知识库 · 匹配模式",
+    find_references: "知识库 · 查找参考",
     search_my_prompts: "搜索历史提示词",
     save_prompt: "保存提示词",
     get_user_profile: "获取用户画像",
@@ -624,7 +632,6 @@
     search_civitai_models: "搜索 CivitAI 模型",
     search_civitai_prompts: "搜索 CivitAI 提示词",
     search_civitai_tags: "搜索 CivitAI 标签",
-    discover_visual_concepts: "视觉概念发现",
     web_search: "网页搜索",
     present_options: "选项交互",
   };
