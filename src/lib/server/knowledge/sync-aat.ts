@@ -15,7 +15,6 @@ import { execSync } from "child_process";
 import { db } from "../db";
 import { artConcepts } from "../db/schema";
 import { eq } from "drizzle-orm";
-import { generateEmbeddings } from "./embedding";
 import { startSync, updateProgress, finishSync, failSync } from "./sync-status";
 
 const AAT_FULL_URL = "http://aatdownloads.getty.edu/VocabData/full.zip";
@@ -407,8 +406,6 @@ export async function syncAat(): Promise<{
 
     let inserted = 0;
     let updated = 0;
-    const embTexts: string[] = [];
-    const embNames: string[] = [];
 
     for (let i = 0; i < entries.length; i++) {
       const e = entries[i];
@@ -445,34 +442,7 @@ export async function syncAat(): Promise<{
         inserted++;
       }
 
-      embTexts.push(`${e.visualDescription || ""} ${e.name} ${e.nameZh || ""}`);
-      embNames.push(e.name);
-
       if (i % 200 === 0) updateProgress({ done: i + 1 });
-    }
-
-    const totalBatches = Math.ceil(embTexts.length / 20);
-    const totalSteps = entries.length + totalBatches;
-    updateProgress({
-      stage: "embedding",
-      total: totalSteps,
-      done: entries.length,
-    });
-
-    if (embTexts.length > 0) {
-      const B = 20;
-      for (let i = 0; i < embTexts.length; i += B) {
-        const batch = embTexts.slice(i, i + B);
-        const names = embNames.slice(i, i + B);
-        const embeddings = await generateEmbeddings(batch);
-        for (let j = 0; j < embeddings.length; j++) {
-          await db
-            .update(artConcepts)
-            .set({ embedding: JSON.stringify(embeddings[j]) })
-            .where(eq(artConcepts.name, names[j]));
-        }
-        updateProgress({ done: entries.length + Math.floor(i / B) + 1 });
-      }
     }
 
     finishSync();

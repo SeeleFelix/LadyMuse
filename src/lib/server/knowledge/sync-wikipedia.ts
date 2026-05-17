@@ -1,7 +1,6 @@
 import { db } from "../db";
 import { artConcepts } from "../db/schema";
 import { eq, or } from "drizzle-orm";
-import { generateEmbeddings } from "./embedding";
 import { startSync, updateProgress, finishSync, failSync } from "./sync-status";
 
 // Wikipedia 分类 → 维度映射
@@ -121,7 +120,6 @@ export async function syncWikipedia(): Promise<{
   try {
     let inserted = 0;
     let skipped = 0;
-    const embeddingTargets: string[] = [];
 
     const categoryEntries = Object.entries(WIKIPEDIA_CATEGORY_MAPPING);
     updateProgress({
@@ -193,42 +191,15 @@ export async function syncWikipedia(): Promise<{
             .where(eq(artConcepts.id, old.id));
 
           skipped++;
-          embeddingTargets.push(title);
         } else {
           await db.insert(artConcepts).values(data);
           inserted++;
-          embeddingTargets.push(title);
         }
 
         await new Promise((r) => setTimeout(r, DELAY_MS));
       }
 
       updateProgress({ done: ci + 1 });
-    }
-
-    updateProgress({ stage: "importing" });
-
-    // 批量生成 embedding（仅处理本次同步涉及的条目）
-    if (embeddingTargets.length > 0) {
-      updateProgress({ stage: "embedding" });
-      const rows = await db
-        .select({
-          name: artConcepts.name,
-          visualDescription: artConcepts.visualDescription,
-        })
-        .from(artConcepts)
-        .where(or(...embeddingTargets.map((n) => eq(artConcepts.name, n))));
-
-      const texts = rows.map((c) => c.visualDescription || "");
-      if (texts.length > 0) {
-        const embeddings = await generateEmbeddings(texts);
-        for (let i = 0; i < rows.length; i++) {
-          await db
-            .update(artConcepts)
-            .set({ embedding: JSON.stringify(embeddings[i]) })
-            .where(eq(artConcepts.name, rows[i].name));
-        }
-      }
     }
 
     finishSync();
