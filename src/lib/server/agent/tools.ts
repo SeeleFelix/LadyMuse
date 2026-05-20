@@ -41,7 +41,12 @@ function buildMultiWordFilter(words: string[], fields: any[]) {
 }
 
 function vecSearch(vecTable: string, queryEmbedding: number[], k: number) {
-  const VALID = ["vec_concepts", "vec_patterns", "vec_references"] as const;
+  const VALID = [
+    "vec_concepts",
+    "vec_patterns",
+    "vec_references",
+    "vec_danbooru",
+  ] as const;
   if (!(VALID as readonly string[]).includes(vecTable)) {
     throw new Error(`Invalid vec table: ${vecTable}`);
   }
