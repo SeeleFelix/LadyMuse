@@ -84,26 +84,19 @@ export async function importDanbooru() {
     );
     const now = new Date().toISOString();
 
-    // Batch in chunks of 500 to avoid transaction parameter limit
-    const CHUNK = 500;
-    for (let i = 0; i < wikis.length; i += CHUNK) {
-      const batch = wikis.slice(i, i + CHUNK);
-      const tx = sqlite.transaction(() => {
-        for (const wiki of batch) {
-          if (!tags.has(wiki.title)) continue;
-          insertStmt.run(
-            wiki.title,
-            tags.get(wiki.title) ?? 0,
-            wiki.body,
-            wiki.other_names || null,
-            now,
-            wiki.updated_at || now,
-          );
-          inserted++;
-        }
-      });
-      tx();
-      if (inserted % 5000 < CHUNK) {
+    // Run without transaction — WAL mode handles individual inserts efficiently
+    for (const wiki of wikis) {
+      if (!tags.has(wiki.title)) continue;
+      insertStmt.run(
+        wiki.title,
+        tags.get(wiki.title) ?? 0,
+        wiki.body,
+        wiki.other_names || null,
+        now,
+        wiki.updated_at || now,
+      );
+      inserted++;
+      if (inserted % 5000 === 0) {
         console.log(`[danbooru] ${inserted} / ~50000`);
         updateProgress({ done: inserted });
       }
