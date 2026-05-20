@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { db, sqlite } from "../db";
 import {
   danbooruTags,
   danbooruTagAliases,
@@ -77,54 +77,52 @@ export async function importDanbooru() {
     // --- Join & upsert ---
     updateProgress({ stage: "importing", total: wikis.length, done: 0 });
     let inserted = 0;
-    let updated = 0;
 
-    for (const wiki of wikis) {
-      if (!tags.has(wiki.title)) continue;
+    const insertStmt = sqlite.prepare(
+      `INSERT OR REPLACE INTO danbooru_tags (name, post_count, body, other_names, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+    const now = new Date().toISOString();
 
-      const existing = await db
-        .select({ name: danbooruTags.name })
-        .from(danbooruTags)
-        .where(eq(danbooruTags.name, wiki.title));
+    const tx = sqlite.transaction(() => {
+      for (const wiki of wikis) {
+        if (!tags.has(wiki.title)) continue;
 
-      const data = {
-        postCount: tags.get(wiki.title) ?? 0,
-        body: wiki.body,
-        otherNames: wiki.other_names || null,
-        updatedAt: wiki.updated_at || new Date().toISOString(),
-      };
-
-      if (existing.length > 0) {
-        await db
-          .update(danbooruTags)
-          .set(data)
-          .where(eq(danbooruTags.name, wiki.title));
-        updated++;
-      } else {
-        await db.insert(danbooruTags).values({
-          name: wiki.title,
-          ...data,
-          createdAt: new Date().toISOString(),
-        });
+        insertStmt.run(
+          wiki.title,
+          tags.get(wiki.title) ?? 0,
+          wiki.body,
+          wiki.other_names || null,
+          now,
+          wiki.updated_at || now,
+        );
         inserted++;
-      }
 
-      if ((inserted + updated) % 1000 === 0) {
-        updateProgress({ done: inserted + updated });
+        if (inserted % 5000 === 0) {
+          console.log(`[danbooru] ${inserted} / ~50000`);
+        }
       }
-    }
+    });
+
+    tx();
+
+    console.log(`[danbooru] Upserted ${inserted} tags into danbooru_tags`);
+    updateProgress({ done: inserted });
 
     // --- Aliases ---
     const aliasFiles = findFiles("alias");
     if (aliasFiles.length > 0) {
       const aliases = readJsonLines<AliasRow>(aliasFiles);
-      await db.delete(danbooruTagAliases);
-      for (const a of aliases) {
-        await db.insert(danbooruTagAliases).values({
-          antecedentName: a.antecedent_name,
-          consequentName: a.consequent_name,
-        });
-      }
+      sqlite.exec("DELETE FROM danbooru_tag_aliases");
+      const aliasStmt = sqlite.prepare(
+        "INSERT INTO danbooru_tag_aliases (antecedent_name, consequent_name) VALUES (?, ?)",
+      );
+      const aliasTx = sqlite.transaction(() => {
+        for (const a of aliases) {
+          aliasStmt.run(a.antecedent_name, a.consequent_name);
+        }
+      });
+      aliasTx();
       console.log(`[danbooru] Loaded ${aliases.length} aliases`);
     }
 
@@ -132,13 +130,16 @@ export async function importDanbooru() {
     const implFiles = findFiles("implication");
     if (implFiles.length > 0) {
       const imps = readJsonLines<ImplicationRow>(implFiles);
-      await db.delete(danbooruTagImplications);
-      for (const i of imps) {
-        await db.insert(danbooruTagImplications).values({
-          antecedentName: i.antecedent_name,
-          consequentName: i.consequent_name,
-        });
-      }
+      sqlite.exec("DELETE FROM danbooru_tag_implications");
+      const implStmt = sqlite.prepare(
+        "INSERT INTO danbooru_tag_implications (antecedent_name, consequent_name) VALUES (?, ?)",
+      );
+      const implTx = sqlite.transaction(() => {
+        for (const i of imps) {
+          implStmt.run(i.antecedent_name, i.consequent_name);
+        }
+      });
+      implTx();
       console.log(`[danbooru] Loaded ${imps.length} implications`);
     }
 
@@ -148,7 +149,7 @@ export async function importDanbooru() {
     console.log(
       `[danbooru] Import complete: ${inserted} inserted, ${updated} updated`,
     );
-    return { inserted, updated, total: inserted + updated };
+    return { total: inserted };
   } catch (e: any) {
     failSync(e.message);
     throw e;
