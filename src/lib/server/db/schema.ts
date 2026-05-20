@@ -314,6 +314,35 @@ export const danbooruSyncLog = sqliteTable("danbooru_sync_log", {
   descriptionsPending: integer("descriptions_pending").notNull(),
 });
 
+// Danbooru Tag Knowledge Base
+export const danbooruTags = sqliteTable("danbooru_tags", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  postCount: integer("post_count").default(0),
+  body: text("body"),
+  otherNames: text("other_names"),
+  embedding: text("embedding"),
+  createdAt: text("created_at"),
+  updatedAt: text("updated_at"),
+});
+
+export const danbooruTagAliases = sqliteTable("danbooru_tag_aliases", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  antecedentName: text("antecedent_name").notNull(),
+  consequentName: text("consequent_name").notNull(),
+  status: text("status").default("active"),
+});
+
+export const danbooruTagImplications = sqliteTable(
+  "danbooru_tag_implications",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    antecedentName: text("antecedent_name").notNull(),
+    consequentName: text("consequent_name").notNull(),
+    status: text("status").default("active"),
+  },
+);
+
 // Usage Tracking
 export const usageLogs = sqliteTable("usage_logs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
