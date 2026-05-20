@@ -11,9 +11,12 @@ import {
   keywordStats,
   sessions,
   sessionMessages,
+  danbooruTags,
+  danbooruTagAliases,
+  danbooruTagImplications,
 } from "../db/schema";
 import { eq, like, or, and, desc, sql } from "drizzle-orm";
-import { generateEmbedding, cosineSimilarity } from "../knowledge/embedding";
+import { generateEmbedding } from "../knowledge/embedding";
 import { sqlite } from "../db";
 import {
   searchModels,
@@ -35,6 +38,20 @@ function buildMultiWordFilter(words: string[], fields: any[]) {
     }
   }
   return or(...conditions);
+}
+
+function vecSearch(vecTable: string, queryEmbedding: number[], k: number) {
+  const VALID = ["vec_concepts", "vec_patterns", "vec_references"] as const;
+  if (!(VALID as readonly string[]).includes(vecTable)) {
+    throw new Error(`Invalid vec table: ${vecTable}`);
+  }
+  const vec = new Float32Array(queryEmbedding);
+  const blob = Buffer.from(vec.buffer);
+  return sqlite
+    .prepare(
+      `SELECT id, distance FROM ${vecTable} WHERE embedding MATCH ? AND k = ? ORDER BY distance`,
+    )
+    .all(blob, k) as { id: string; distance: number }[];
 }
 
 export const searchMyPrompts = tool({
@@ -496,24 +513,12 @@ export const findConcepts = tool({
   }),
   execute: async ({ intent, category }) => {
     const queryEmbedding = await generateEmbedding(intent);
-    const vec = new Float32Array(queryEmbedding);
-    const blob = Buffer.from(vec.buffer);
-
-    const rows = sqlite
-      .prepare(
-        `SELECT v.id, v.distance
-         FROM vec_concepts v
-         WHERE v.embedding MATCH ? AND k = ?
-         ORDER BY v.distance
-         LIMIT 8`,
-      )
-      .all(blob, 8) as { id: string; distance: number }[];
+    const rows = vecSearch("vec_concepts", queryEmbedding, 8);
 
     if (rows.length === 0) {
       return "向量索引为空。请先生成 embedding。";
     }
 
-    // Fetch concept details for matched names, optionally filtered by category
     const names = rows.map((r) => r.id);
     const conds = [or(...names.map((n) => eq(artConcepts.name, n)))];
     if (category) conds.push(eq(artConcepts.category, category));
@@ -529,7 +534,6 @@ export const findConcepts = tool({
       .from(artConcepts)
       .where(and(...conds));
 
-    // Build score map from vec results (distance = 1 - cosine_similarity)
     const scoreMap = new Map(rows.map((r) => [r.id, 1 - r.distance]));
 
     const results = concepts
@@ -539,7 +543,7 @@ export const findConcepts = tool({
         category: c.category,
         subCategory: c.subCategory,
         snippet: (c.visualDescription || "").slice(0, 150),
-        score: scoreMap.get(c.name) ?? 0,
+        score: Math.round((scoreMap.get(c.name) ?? 0) * 10000) / 10000,
       }))
       .filter((c) => c.score > 0.5)
       .sort((a, b) => b.score - a.score);
@@ -564,27 +568,34 @@ export const findPatterns = tool({
   }),
   execute: async ({ intent, concepts }) => {
     const queryEmbedding = await generateEmbedding(intent);
+    const rows = vecSearch("vec_patterns", queryEmbedding, 8);
 
-    const all = await db
+    if (rows.length === 0) {
+      return "向量索引为空。请先生成 pattern embedding。";
+    }
+
+    const names = rows.map((r) => r.id);
+    const patterns = await db
       .select({
         name: artPatterns.name,
         intent: artPatterns.intent,
         structureOrder: artPatterns.structureOrder,
         involvesDimensions: artPatterns.involvesDimensions,
         involvesConcepts: artPatterns.involvesConcepts,
-        embedding: artPatterns.embedding,
       })
-      .from(artPatterns);
+      .from(artPatterns)
+      .where(or(...names.map((n) => eq(artPatterns.name, n))));
 
-    const scored = all
-      .filter((p) => p.embedding)
+    const scoreMap = new Map(rows.map((r) => [r.id, 1 - r.distance]));
+
+    const scored = patterns
       .map((p) => {
-        let score = cosineSimilarity(queryEmbedding, JSON.parse(p.embedding!));
+        let score = scoreMap.get(p.name) ?? 0;
 
         if (concepts && concepts.length > 0 && p.involvesConcepts) {
           const involved = JSON.parse(p.involvesConcepts) as string[];
           const overlap = concepts.filter((c) => involved.includes(c)).length;
-          score += overlap * 0.15;
+          score = Math.min(1, score + overlap * 0.15);
         }
 
         return {
@@ -594,10 +605,11 @@ export const findPatterns = tool({
             ? JSON.parse(p.involvesDimensions)
             : [],
           structureOrder: p.structureOrder,
-          score,
+          score: Math.round(score * 10000) / 10000,
         };
       })
       .sort((a, b) => b.score - a.score)
+      .filter((p) => p.score > 0.5)
       .slice(0, 3);
 
     if (scored.length === 0) {
@@ -630,9 +642,13 @@ export const findReferences = tool({
 
       const filtered = all.filter((r) => {
         let match = true;
-        if (concepts?.length && r.appliedConcepts) {
-          const ac = JSON.parse(r.appliedConcepts) as string[];
-          match = concepts.some((c) => ac.includes(c));
+        if (concepts?.length) {
+          if (r.appliedConcepts) {
+            const ac = JSON.parse(r.appliedConcepts) as string[];
+            match = concepts.some((c) => ac.includes(c));
+          } else {
+            match = false;
+          }
         }
         if (pattern && r.appliedPattern !== pattern) match = false;
         return match;
@@ -640,16 +656,19 @@ export const findReferences = tool({
 
       if (intent) {
         const qEmb = await generateEmbedding(intent);
+        const vecRows = vecSearch("vec_references", qEmb, 20);
+        const scoreMap = new Map(vecRows.map((r) => [r.id, 1 - r.distance]));
+
         results = filtered
-          .filter((r) => r.embedding)
           .map((r) => ({
             name: r.name,
             intent: r.intent,
             promptPreview: r.positivePrompt.slice(0, 200),
             params: r.paramsJson ? JSON.parse(r.paramsJson) : null,
             takeaway: r.takeaway,
-            score: cosineSimilarity(qEmb, JSON.parse(r.embedding!)),
+            score: Math.round((scoreMap.get(r.name) ?? 0) * 10000) / 10000,
           }))
+          .filter((r) => r.score > 0.5)
           .sort((a, b) => b.score - a.score)
           .slice(0, limit);
       } else {
@@ -663,21 +682,34 @@ export const findReferences = tool({
       }
     } else if (intent) {
       const qEmb = await generateEmbedding(intent);
-      const all = await db
+      const vecRows = vecSearch("vec_references", qEmb, 20);
+      const scoreMap = new Map(vecRows.map((r) => [r.id, 1 - r.distance]));
+      const names = vecRows.map((r) => r.id);
+
+      if (names.length === 0) {
+        return "未找到匹配的参考案例。";
+      }
+
+      const refs = await db
         .select()
         .from(artReferences)
-        .where(eq(artReferences.verified, 1));
+        .where(
+          and(
+            eq(artReferences.verified, 1),
+            or(...names.map((n) => eq(artReferences.name, n))),
+          ),
+        );
 
-      results = all
-        .filter((r) => r.embedding)
+      results = refs
         .map((r) => ({
           name: r.name,
           intent: r.intent,
           promptPreview: r.positivePrompt.slice(0, 200),
           params: r.paramsJson ? JSON.parse(r.paramsJson) : null,
           takeaway: r.takeaway,
-          score: cosineSimilarity(qEmb, JSON.parse(r.embedding!)),
+          score: Math.round((scoreMap.get(r.name) ?? 0) * 10000) / 10000,
         }))
+        .filter((r) => r.score > 0.5)
         .sort((a, b) => b.score - a.score)
         .slice(0, limit);
     } else {
@@ -711,6 +743,186 @@ export const findReferences = tool({
   },
 });
 
+export const searchDanbooruTags = tool({
+  description:
+    "搜索 Danbooru 标签知识库。用自然语言描述视觉概念，返回匹配的标签名、描述和使用频率。标签名可直接用于 prompt。可选的 keyword 参数用于模糊匹配标签名。",
+  inputSchema: z.object({
+    query: z.string().describe("自然语言描述，如'soft cinematic lighting'"),
+    keyword: z.string().optional().describe("可选的标签名关键词模糊匹配"),
+  }),
+  execute: async ({ query, keyword }) => {
+    const queryEmbedding = await generateEmbedding(query);
+    const rows = vecSearch("vec_danbooru", queryEmbedding, 20);
+
+    if (rows.length === 0) {
+      return "标签向量索引为空。请先生成 embedding。";
+    }
+
+    const scoreMap = new Map(rows.map((r) => [r.id, 1 - r.distance]));
+    let names = rows.filter((r) => scoreMap.get(r.id)! > 0.3).map((r) => r.id);
+
+    if (keyword) {
+      const kwResults = await db
+        .select({ name: danbooruTags.name })
+        .from(danbooruTags)
+        .where(like(danbooruTags.name, `%${keyword.replace(/\s+/g, "_")}%`))
+        .limit(20);
+      for (const r of kwResults) {
+        if (!names.includes(r.name)) names.push(r.name);
+      }
+    }
+
+    if (names.length === 0) {
+      return "未找到匹配的标签。尝试换一种描述方式，或用 keyword 参数模糊匹配。";
+    }
+
+    const tags = await db
+      .select({
+        name: danbooruTags.name,
+        body: danbooruTags.body,
+        postCount: danbooruTags.postCount,
+      })
+      .from(danbooruTags)
+      .where(or(...names.slice(0, 20).map((n) => eq(danbooruTags.name, n))));
+
+    const implRows = await db
+      .select({
+        consequentName: danbooruTagImplications.consequentName,
+      })
+      .from(danbooruTagImplications)
+      .where(
+        or(
+          ...tags.map((t) =>
+            eq(danbooruTagImplications.antecedentName, t.name),
+          ),
+        ),
+      );
+
+    const relatedTags = [...new Set(implRows.map((r) => r.consequentName))];
+
+    return {
+      tags: tags
+        .map((t) => ({
+          name: t.name,
+          description: stripWikiBody(t.body || "").slice(0, 400),
+          postCount: t.postCount,
+          score: Math.round((scoreMap.get(t.name) ?? 0) * 10000) / 10000,
+        }))
+        .sort((a, b) => b.score - a.score),
+      relatedTags:
+        relatedTags.length > 0 ? relatedTags.slice(0, 10) : undefined,
+    };
+  },
+});
+
+export const listDanbooruTopics = tool({
+  description: "列出 Danbooru 标签库中可浏览的所有 topic。",
+  inputSchema: z.object({}),
+  execute: async () => {
+    return [
+      { topic: "lighting", name: "光影技法" },
+      { topic: "composition", name: "构图方式" },
+      { topic: "colors", name: "色彩风格" },
+      { topic: "aesthetic", name: "美学风格" },
+      { topic: "background", name: "背景类型" },
+      { topic: "posture", name: "姿态" },
+      { topic: "gestures", name: "手势" },
+      { topic: "focus", name: "焦点/景深" },
+    ];
+  },
+});
+
+export const browseDanbooruTags = tool({
+  description:
+    "浏览 Danbooru 标签库中某个 topic 下的标签分组。先看有什么分类，再深入了解具体标签。",
+  inputSchema: z.object({
+    topic: z
+      .enum([
+        "lighting",
+        "composition",
+        "colors",
+        "aesthetic",
+        "background",
+        "posture",
+        "gestures",
+        "focus",
+      ])
+      .describe("要浏览的 topic"),
+  }),
+  execute: async ({ topic }) => {
+    const { fetchTagGroup, TAG_GROUP_TOPICS } = await import("../danbooru");
+    const wikiPage = TAG_GROUP_TOPICS[topic as keyof typeof TAG_GROUP_TOPICS];
+    if (!wikiPage) return `Unknown topic: ${topic}`;
+
+    const groups = await fetchTagGroup(wikiPage);
+    if (groups.length === 0) return `Topic "${topic}" returned no data.`;
+
+    return groups.map((g) => ({
+      section: g.section,
+      tags: g.tags,
+    }));
+  },
+});
+
+export const getDanbooruTag = tool({
+  description:
+    "查看单个 Danbooru 标签的完整信息，包括描述、别名、关联标签。用于确认标签含义后再使用。",
+  inputSchema: z.object({
+    name: z.string().describe("标签名，如'backlighting'"),
+  }),
+  execute: async ({ name }) => {
+    const tag = await db
+      .select({
+        name: danbooruTags.name,
+        body: danbooruTags.body,
+        postCount: danbooruTags.postCount,
+        otherNames: danbooruTags.otherNames,
+      })
+      .from(danbooruTags)
+      .where(eq(danbooruTags.name, name))
+      .limit(1);
+
+    if (tag.length === 0) return `标签 "${name}" 未找到。`;
+
+    const [aliases, implications] = await Promise.all([
+      db
+        .select({
+          antecedentName: danbooruTagAliases.antecedentName,
+        })
+        .from(danbooruTagAliases)
+        .where(eq(danbooruTagAliases.consequentName, name)),
+      db
+        .select({
+          consequentName: danbooruTagImplications.consequentName,
+        })
+        .from(danbooruTagImplications)
+        .where(eq(danbooruTagImplications.antecedentName, name)),
+    ]);
+
+    const t = tag[0];
+    return {
+      name: t.name,
+      description: stripWikiBody(t.body || "").slice(0, 400),
+      postCount: t.postCount,
+      otherNames: t.otherNames ? JSON.parse(t.otherNames as string) : [],
+      aliases: aliases.map((a) => a.antecedentName),
+      implies: implications.map((i) => i.consequentName),
+    };
+  },
+});
+
+function stripWikiBody(text: string): string {
+  return text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\{\{([^}]+)\}\}/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/^[#h][1-6][.#\w-]*\.?\s*/gm, "")
+    .replace(/\[\[|\]\]/g, "")
+    .replace(/\[b\]|\[\/b\]|\[i\]|\[\/i\]/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 const allToolDefinitions = {
   explore_dimension: exploreDimension,
   get_concept: getConcept,
@@ -727,6 +939,10 @@ const allToolDefinitions = {
   search_civitai_prompts: searchCivitaiPrompts,
   search_civitai_tags: searchCivitaiTags,
   web_search: webSearch,
+  search_danbooru_tags: searchDanbooruTags,
+  list_danbooru_topics: listDanbooruTopics,
+  browse_danbooru_tags: browseDanbooruTags,
+  get_danbooru_tag: getDanbooruTag,
 };
 
 interface ToolConfig {
