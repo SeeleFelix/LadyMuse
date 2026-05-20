@@ -5,7 +5,7 @@
   }
 
   let status = $state<DanbooruStatus>({ total: 0, embedded: 0 });
-  let syncing = $state(false);
+  let syncing = $state<"" | "import" | "embed">("");
   let error = $state("");
   let progress = $state<{
     percent: number;
@@ -45,7 +45,7 @@
   }
 
   async function importData() {
-    syncing = true;
+    syncing = "import";
     error = "";
     try {
       const res = await fetch("/api/knowledge/danbooru/import", {
@@ -59,12 +59,12 @@
     } catch (e: any) {
       error = e.message;
     } finally {
-      syncing = false;
+      syncing = "";
     }
   }
 
   async function embedData() {
-    syncing = true;
+    syncing = "embed";
     error = "";
     try {
       await fetch("/api/knowledge/embed", {
@@ -76,7 +76,7 @@
     } catch (e: any) {
       error = e.message;
     } finally {
-      syncing = false;
+      syncing = "";
     }
   }
 
@@ -186,10 +186,10 @@
           </div>
           <button
             onclick={importData}
-            disabled={syncing}
+            disabled={syncing !== ""}
             class="rounded-md bg-violet-600 px-4 py-2 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-40 transition-colors"
           >
-            {syncing ? "导入中..." : "导入标签"}
+            {syncing === "import" ? "导入中..." : "导入标签"}
           </button>
         </div>
         <div class="border-t border-zinc-800/40 pt-4">
@@ -202,10 +202,10 @@
             </div>
             <button
               onclick={embedData}
-              disabled={syncing || status.total === 0}
+              disabled={syncing !== "" || status.total === 0}
               class="rounded-md bg-emerald-600 px-4 py-2 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-40 transition-colors"
             >
-              {syncing ? "生成中..." : "生成向量"}
+              {syncing === "embed" ? "生成中..." : "生成向量"}
             </button>
           </div>
         </div>
