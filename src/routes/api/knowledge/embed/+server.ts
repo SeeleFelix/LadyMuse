@@ -1,6 +1,6 @@
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
-import { embedAll } from "$lib/server/knowledge/embed-all";
+import { embedAll, embedTarget } from "$lib/server/knowledge/embed-all";
 import { getSyncStatus } from "$lib/server/knowledge/sync-status";
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -10,8 +10,12 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   const body = await request.json().catch(() => ({}));
-  const { dimension, name } = body || {};
+  const { dimension, name, target } = body || {};
 
-  embedAll(dimension, name).catch((e) => console.error("[embed]", e));
+  if (target === "danbooru") {
+    embedTarget("danbooru").catch((e) => console.error("[embed danbooru]", e));
+  } else {
+    embedAll(dimension, name).catch((e) => console.error("[embed]", e));
+  }
   return json({ ok: true });
 };
