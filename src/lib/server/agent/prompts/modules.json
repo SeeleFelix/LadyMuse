@@ -37,6 +37,10 @@
     {
       "file": "07-texture-methodology.md",
       "enabled": true
+    },
+    {
+      "file": "08-danbooru-guidance.md",
+      "enabled": true
     }
   ],
   "model_modules": {
@@ -64,6 +68,10 @@
     { "name": "search_civitai_prompts", "enabled": true },
     { "name": "search_civitai_tags", "enabled": false },
     { "name": "web_search", "enabled": true },
-    { "name": "present_options", "enabled": true }
+    { "name": "present_options", "enabled": true },
+    { "name": "search_danbooru_tags", "enabled": false },
+    { "name": "list_danbooru_topics", "enabled": false },
+    { "name": "browse_danbooru_tags", "enabled": false },
+    { "name": "get_danbooru_tag", "enabled": false }
   ]
 }
