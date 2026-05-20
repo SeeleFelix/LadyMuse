@@ -86,23 +86,16 @@ export async function importDanbooru() {
     // Run without transaction — WAL mode handles individual inserts efficiently
     for (const wiki of wikis) {
       if (!tags.has(wiki.title)) continue;
-      try {
-        insertStmt.run(
-          wiki.title,
-          tags.get(wiki.title) ?? 0,
-          wiki.body,
-          wiki.other_names || null,
-          now,
-          wiki.updated_at || now,
-        );
-      } catch (e) {
-        console.error(
-          `[danbooru] INSERT failed for "${wiki.title}":`,
-          (e as Error).message,
-          `body_len=${wiki.body.length}, post_count=${tags.get(wiki.title)}`,
-        );
-        throw e;
-      }
+      insertStmt.run(
+        wiki.title,
+        tags.get(wiki.title) ?? 0,
+        wiki.body,
+        typeof wiki.other_names === "string"
+          ? wiki.other_names
+          : JSON.stringify(wiki.other_names),
+        now,
+        wiki.updated_at || now,
+      );
       inserted++;
       if (inserted % 5000 === 0) {
         console.log(`[danbooru] ${inserted} / ~50000`);
