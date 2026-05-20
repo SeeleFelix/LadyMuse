@@ -4,7 +4,6 @@ import {
   danbooruTagAliases,
   danbooruTagImplications,
 } from "../db/schema";
-import { eq } from "drizzle-orm";
 import { readFileSync, existsSync, readdirSync } from "fs";
 import { join } from "path";
 import { startSync, updateProgress, finishSync, failSync } from "./sync-status";
@@ -87,14 +86,23 @@ export async function importDanbooru() {
     // Run without transaction — WAL mode handles individual inserts efficiently
     for (const wiki of wikis) {
       if (!tags.has(wiki.title)) continue;
-      insertStmt.run(
-        wiki.title,
-        tags.get(wiki.title) ?? 0,
-        wiki.body,
-        wiki.other_names || null,
-        now,
-        wiki.updated_at || now,
-      );
+      try {
+        insertStmt.run(
+          wiki.title,
+          tags.get(wiki.title) ?? 0,
+          wiki.body,
+          wiki.other_names || null,
+          now,
+          wiki.updated_at || now,
+        );
+      } catch (e) {
+        console.error(
+          `[danbooru] INSERT failed for "${wiki.title}":`,
+          (e as Error).message,
+          `body_len=${wiki.body.length}, post_count=${tags.get(wiki.title)}`,
+        );
+        throw e;
+      }
       inserted++;
       if (inserted % 5000 === 0) {
         console.log(`[danbooru] ${inserted} / ~50000`);
