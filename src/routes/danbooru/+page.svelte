@@ -7,6 +7,33 @@
   let status = $state<DanbooruStatus>({ total: 0, embedded: 0 });
   let syncing = $state(false);
   let error = $state("");
+  let progress = $state<{
+    percent: number;
+    done: number;
+    total: number;
+  } | null>(null);
+  let sse: EventSource | null = null;
+
+  function connectSSE() {
+    sse = new EventSource("/api/knowledge/sync/progress");
+    sse.addEventListener("progress", (e) => {
+      const data = JSON.parse(e.data);
+      if (data.running) {
+        progress = {
+          percent: data.percent,
+          done: data.done,
+          total: data.total,
+        };
+      } else {
+        progress = null;
+        loadStatus();
+      }
+    });
+    sse.onerror = () => {
+      sse?.close();
+      setTimeout(connectSSE, 3000);
+    };
+  }
 
   async function loadStatus() {
     try {
@@ -59,6 +86,8 @@
 
   $effect(() => {
     loadStatus();
+    connectSSE();
+    return () => sse?.close();
   });
 </script>
 
@@ -113,6 +142,32 @@
         {/if}
       </div>
     </section>
+
+    <!-- Progress -->
+    {#if progress}
+      <section class="rounded-lg border border-zinc-800/60 bg-zinc-900/50">
+        <div
+          class="flex items-center gap-3 border-b border-zinc-800/40 px-5 py-3"
+        >
+          <span class="text-sm font-medium text-zinc-200">向量生成进度</span>
+        </div>
+        <div class="p-5 space-y-2">
+          <div class="flex justify-between text-xs">
+            <span class="text-zinc-500"
+              >{progress.done.toLocaleString()} / {progress.total.toLocaleString()}
+              标签</span
+            >
+            <span class="text-emerald-400">{progress.percent}%</span>
+          </div>
+          <div class="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+            <div
+              class="h-full rounded-full bg-emerald-500 transition-all duration-300"
+              style="width: {progress.percent}%"
+            ></div>
+          </div>
+        </div>
+      </section>
+    {/if}
 
     <!-- Actions -->
     <section class="rounded-lg border border-zinc-800/60 bg-zinc-900/50">
