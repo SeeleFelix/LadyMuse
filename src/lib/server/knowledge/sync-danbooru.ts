@@ -146,9 +146,7 @@ export async function importDanbooru() {
     updateProgress({ done: wikis.length });
     finishSync();
 
-    console.log(
-      `[danbooru] Import complete: ${inserted} inserted, ${updated} updated`,
-    );
+    console.log(`[danbooru] Import complete: ${inserted} tags`);
     return { total: inserted };
   } catch (e: any) {
     failSync(e.message);
