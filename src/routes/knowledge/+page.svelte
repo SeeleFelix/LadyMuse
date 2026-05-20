@@ -188,30 +188,6 @@
     });
   }
 
-  let danbooruStatus = $state<{ total: number; embedded: number }>({
-    total: 0,
-    embedded: 0,
-  });
-
-  async function loadDanbooruStatus() {
-    const res = await fetch("/api/knowledge/danbooru/status");
-    if (res.ok) danbooruStatus = await res.json();
-  }
-
-  async function importDanbooru() {
-    await fetch("/api/knowledge/danbooru/import", { method: "POST" });
-    await loadDanbooruStatus();
-  }
-
-  async function embedDanbooru() {
-    await fetch("/api/knowledge/embed", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ target: "danbooru" }),
-    });
-    await loadDanbooruStatus();
-  }
-
   function copyText(text: string) {
     navigator.clipboard.writeText(text);
     copied = true;
@@ -280,36 +256,6 @@
       同步失败: {syncStatus.error}
     </div>
   {/if}
-
-  <!-- Danbooru 导入区 -->
-  <div
-    class="flex items-center gap-3 border-b border-zinc-800 bg-zinc-900/30 px-4 py-2"
-  >
-    <span class="text-sm font-medium text-zinc-300">Danbooru 标签库</span>
-    <span class="text-xs text-zinc-500"
-      >文件放在 <code class="text-zinc-400">data/danbooru/</code></span
-    >
-    <a
-      href="/docs/danbooru-import.md"
-      target="_blank"
-      class="text-xs text-violet-400 hover:text-violet-300">导出指引 →</a
-    >
-    <span class="text-xs text-zinc-500"
-      >已导入: {danbooruStatus.total} · 已向量化: {danbooruStatus.embedded}</span
-    >
-    <button
-      onclick={() => importDanbooru()}
-      disabled={syncStatus.running}
-      class="rounded bg-zinc-800 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"
-      >导入标签</button
-    >
-    <button
-      onclick={() => embedDanbooru()}
-      disabled={syncStatus.running || danbooruStatus.total === 0}
-      class="rounded bg-emerald-900/30 px-3 py-1 text-xs text-emerald-400 hover:bg-emerald-900/50 disabled:opacity-50"
-      >生成向量</button
-    >
-  </div>
 
   <div class="flex flex-1 overflow-hidden">
     <!-- 左侧：维度 -->
