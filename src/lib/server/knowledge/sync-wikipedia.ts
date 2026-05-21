@@ -184,9 +184,7 @@ export async function syncWikipedia(): Promise<{
             .set({
               ...data,
               source: newSource,
-              visualDescription: oldSource.includes("aat")
-                ? old.visualDescription
-                : summary.extract,
+              visualDescription: summary.extract,
             })
             .where(eq(artConcepts.id, old.id));
 

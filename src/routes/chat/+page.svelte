@@ -616,6 +616,7 @@
     "05-color-methodology.md": "色彩方法论",
     "06-camera-methodology.md": "镜头方法论",
     "07-texture-methodology.md": "质感方法论",
+    "08-danbooru-guidance.md": "Danbooru 标签库",
   };
 
   const TOOL_LABELS: Record<string, string> = {
@@ -634,6 +635,9 @@
     search_civitai_tags: "搜索 CivitAI 标签",
     web_search: "网页搜索",
     present_options: "选项交互",
+    search_danbooru_tags: "Danbooru · 搜索标签",
+    browse_danbooru_tags: "Danbooru · 浏览分类",
+    get_danbooru_tag: "Danbooru · 查看标签",
   };
 
   async function loadAgentConfig() {

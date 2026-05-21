@@ -165,7 +165,7 @@
     if (res.ok) selectedConcept = await res.json();
   }
 
-  async function triggerSync(source: "aat" | "wikipedia") {
+  async function triggerSync(source: "wikipedia") {
     await fetch(`/api/knowledge/sync/${source}`, { method: "POST" });
   }
 
@@ -207,12 +207,6 @@
         >上次同步: {new Date(syncStatus.lastSync).toLocaleString()}</span
       >
     {/if}
-    <button
-      onclick={() => triggerSync("aat")}
-      disabled={syncStatus.running}
-      class="rounded bg-zinc-800 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"
-      >同步 AAT</button
-    >
     <button
       onclick={() => triggerSync("wikipedia")}
       disabled={syncStatus.running}
