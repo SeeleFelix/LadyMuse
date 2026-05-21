@@ -9,7 +9,22 @@ const DEFAULT_PATH = join(
   "src/lib/server/agent/prompts/modules.json",
 );
 
-function readDefaults() {
+interface ModuleConfig {
+  file: string;
+  enabled: boolean;
+  exclusive_group?: string;
+}
+
+interface ToolConfig {
+  name: string;
+  enabled: boolean;
+}
+
+function readDefaults(): {
+  shared_modules: ModuleConfig[];
+  model_modules: Record<string, ModuleConfig>;
+  tools: ToolConfig[];
+} {
   return JSON.parse(readFileSync(DEFAULT_PATH, "utf-8"));
 }
 
@@ -18,13 +33,25 @@ export const GET: RequestHandler = async () => {
 
   const modulesJson = await getConfig("agent_modules");
   const toolsJson = await getConfig("agent_tools");
+  const dbModules: ModuleConfig[] = modulesJson ? JSON.parse(modulesJson) : [];
+  const overrideMap = new Map(dbModules.map((m) => [m.file, m]));
+  const sharedModules = defaults.shared_modules.map((m) =>
+    overrideMap.has(m.file)
+      ? { ...m, enabled: overrideMap.get(m.file)!.enabled }
+      : m,
+  );
 
   return json({
-    shared_modules: modulesJson
-      ? JSON.parse(modulesJson)
-      : defaults.shared_modules,
+    shared_modules: sharedModules,
     model_modules: defaults.model_modules,
-    tools: toolsJson ? JSON.parse(toolsJson) : defaults.tools,
+    tools: toolsJson
+      ? defaults.tools.map((t) => {
+          const override = (JSON.parse(toolsJson!) as ToolConfig[]).find(
+            (o) => o.name === t.name,
+          );
+          return override ? { ...t, enabled: override.enabled } : t;
+        })
+      : defaults.tools,
   });
 };
 

@@ -70,7 +70,6 @@
     { "name": "web_search", "enabled": true },
     { "name": "present_options", "enabled": true },
     { "name": "search_danbooru_tags", "enabled": false },
-    { "name": "list_danbooru_topics", "enabled": false },
     { "name": "browse_danbooru_tags", "enabled": false },
     { "name": "get_danbooru_tag", "enabled": false }
   ]

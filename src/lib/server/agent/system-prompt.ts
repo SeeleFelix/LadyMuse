@@ -24,12 +24,22 @@ function readDefaults(): PromptConfig {
 async function loadPromptModules(targetModelId: string): Promise<string> {
   const dir = join(import.meta.dirname, "prompts");
 
-  // Read module config from database, fallback to file
+  // File defaults are the source of truth for which modules exist.
+  // DB config only overrides enabled/disabled for modules it knows about;
+  // new modules added to the file automatically appear in all environments.
   const modulesJson = await getConfig("agent_modules");
   const defaults = readDefaults();
-  const sharedModules: ModuleConfig[] = modulesJson
+  const dbOverrides: ModuleConfig[] = modulesJson
     ? JSON.parse(modulesJson)
-    : defaults.shared_modules;
+    : [];
+  const overrideMap = new Map(
+    dbOverrides.map((m: ModuleConfig) => [m.file, m]),
+  );
+  const sharedModules: ModuleConfig[] = defaults.shared_modules.map((m) =>
+    overrideMap.has(m.file)
+      ? { ...m, enabled: overrideMap.get(m.file)!.enabled }
+      : m,
+  );
 
   // Filter enabled modules, respecting exclusive_group (only first enabled per group)
   const seenGroups = new Set<string>();
@@ -90,7 +100,19 @@ ${STYLE_GUIDANCE[promptStyle] || STYLE_GUIDANCE.hybrid}
 ${langInstruction}`;
 }
 
-export async function buildSystemPrompt(): Promise<string> {
+export function assemblePrompt(
+  modules: string,
+  directory: string,
+  relatedConcepts: string,
+  suffix: string,
+): string {
+  const conceptsSection = relatedConcepts.trim()
+    ? `${relatedConcepts.trim()}\n\n`
+    : "";
+  return `${modules}\n\n${conceptsSection}${directory}\n\n${suffix}`;
+}
+
+export async function buildSystemPrompt(userMessage?: string): Promise<string> {
   const targetModelId = (await getConfig("target_image_model")) || "zit";
   const outputLang = (await getConfig("output_language")) || "zh";
   const promptStyle = (await getConfig("prompt_style")) || "hybrid";
@@ -100,5 +122,67 @@ export async function buildSystemPrompt(): Promise<string> {
   const modules = await loadPromptModules(targetModelId);
   const directory = await buildKnowledgeDirectory();
 
-  return `${modules}\n\n${directory}\n\n${buildSuffix(profile, promptStyle, outputLang)}`;
+  let relatedConcepts = "";
+  if (userMessage) {
+    relatedConcepts = await findRelatedConceptsForPrompt(userMessage);
+  }
+
+  return assemblePrompt(
+    modules,
+    directory,
+    relatedConcepts,
+    buildSuffix(profile, promptStyle, outputLang),
+  );
+}
+
+async function findRelatedConceptsForPrompt(
+  userMessage: string,
+): Promise<string> {
+  const { generateEmbedding } = await import("../knowledge/embedding");
+  const { sqlite } = await import("../db");
+  const { db } = await import("../db");
+  const { artConcepts } = await import("../db/schema");
+  const { eq, or, and } = await import("drizzle-orm");
+  const { formatRelatedConcepts } = await import("../knowledge/directory");
+
+  const embedding = await generateEmbedding(userMessage);
+  const vec = new Float32Array(embedding);
+  const blob = Buffer.from(vec.buffer);
+
+  const rows = sqlite
+    .prepare(
+      `SELECT id, distance FROM vec_concepts WHERE embedding MATCH ? AND k = ? ORDER BY distance`,
+    )
+    .all(blob, 20) as { id: string; distance: number }[];
+
+  if (rows.length === 0) return "";
+
+  const scoreMap = new Map(rows.map((r) => [r.id, 1 - r.distance]));
+  const names = rows.filter((r) => scoreMap.get(r.id)! > 0.5).map((r) => r.id);
+
+  if (names.length === 0) return "";
+
+  const concepts = await db
+    .select({
+      name: artConcepts.name,
+      nameZh: artConcepts.nameZh,
+      category: artConcepts.category,
+      subCategory: artConcepts.subCategory,
+      visualDescription: artConcepts.visualDescription,
+    })
+    .from(artConcepts)
+    .where(and(or(...names.map((n) => eq(artConcepts.name, n)))));
+
+  const details = concepts
+    .map((c) => ({
+      name: c.name,
+      nameZh: c.nameZh,
+      category: c.category,
+      subCategory: c.subCategory,
+      visualDescription: c.visualDescription,
+      score: scoreMap.get(c.name) ?? 0,
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  return formatRelatedConcepts(details);
 }

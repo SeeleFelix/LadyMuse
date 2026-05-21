@@ -10,7 +10,7 @@
 ### 使用流程
 
 1. **语义搜索** — 用户描述想要的视觉效果时，调用 `search_danbooru_tags`，用自然语言搜索匹配标签。返回的标签名可直接嵌入 prompt
-2. **探索浏览** — 不确定有哪些方向可选时，先调用 `list_danbooru_topics` 查看所有 topic，再 `browse_danbooru_tags` 浏览具体 topic 下的标签分组
+2. **探索浏览** — 不确定有哪些方向可选时，调用 `browse_danbooru_tags` 浏览具体 topic 下的标签分组
 3. **确认标签** — 需要了解标签含义时，调用 `get_danbooru_tag` 查看完整描述、别名和关联标签
 
 ### 关键规则

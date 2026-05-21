@@ -539,7 +539,9 @@ export const findConcepts = tool({
       .from(artConcepts)
       .where(and(...conds));
 
-    const scoreMap = new Map(rows.map((r) => [r.id, 1 - r.distance]));
+    const scoreMap = new Map(
+      rows.map((r) => [r.id, 1 - (r.distance * r.distance) / 2]),
+    );
 
     const results = concepts
       .map((c) => ({
@@ -591,7 +593,9 @@ export const findPatterns = tool({
       .from(artPatterns)
       .where(or(...names.map((n) => eq(artPatterns.name, n))));
 
-    const scoreMap = new Map(rows.map((r) => [r.id, 1 - r.distance]));
+    const scoreMap = new Map(
+      rows.map((r) => [r.id, 1 - (r.distance * r.distance) / 2]),
+    );
 
     const scored = patterns
       .map((p) => {
@@ -662,7 +666,9 @@ export const findReferences = tool({
       if (intent) {
         const qEmb = await generateEmbedding(intent);
         const vecRows = vecSearch("vec_references", qEmb, 20);
-        const scoreMap = new Map(vecRows.map((r) => [r.id, 1 - r.distance]));
+        const scoreMap = new Map(
+          vecRows.map((r) => [r.id, 1 - (r.distance * r.distance) / 2]),
+        );
 
         results = filtered
           .map((r) => ({
@@ -688,7 +694,9 @@ export const findReferences = tool({
     } else if (intent) {
       const qEmb = await generateEmbedding(intent);
       const vecRows = vecSearch("vec_references", qEmb, 20);
-      const scoreMap = new Map(vecRows.map((r) => [r.id, 1 - r.distance]));
+      const scoreMap = new Map(
+        vecRows.map((r) => [r.id, 1 - (r.distance * r.distance) / 2]),
+      );
       const names = vecRows.map((r) => r.id);
 
       if (names.length === 0) {
@@ -763,14 +771,24 @@ export const searchDanbooruTags = tool({
       return "标签向量索引为空。请先生成 embedding。";
     }
 
-    const scoreMap = new Map(rows.map((r) => [r.id, 1 - r.distance]));
+    const scoreMap = new Map(
+      rows.map((r) => [r.id, 1 - (r.distance * r.distance) / 2]),
+    );
     let names = rows.filter((r) => scoreMap.get(r.id)! > 0.3).map((r) => r.id);
 
     if (keyword) {
+      const token = keyword.replace(/\s+/g, "_");
       const kwResults = await db
         .select({ name: danbooruTags.name })
         .from(danbooruTags)
-        .where(like(danbooruTags.name, `%${keyword.replace(/\s+/g, "_")}%`))
+        .where(
+          or(
+            eq(danbooruTags.name, token),
+            like(danbooruTags.name, `${token}\\_%`),
+            like(danbooruTags.name, `%\\_${token}`),
+            like(danbooruTags.name, `%\\_${token}\\_%`),
+          ),
+        )
         .limit(20);
       for (const r of kwResults) {
         if (!names.includes(r.name)) names.push(r.name);
@@ -817,23 +835,6 @@ export const searchDanbooruTags = tool({
       relatedTags:
         relatedTags.length > 0 ? relatedTags.slice(0, 10) : undefined,
     };
-  },
-});
-
-export const listDanbooruTopics = tool({
-  description: "列出 Danbooru 标签库中可浏览的所有 topic。",
-  inputSchema: z.object({}),
-  execute: async () => {
-    return [
-      { topic: "lighting", name: "光影技法" },
-      { topic: "composition", name: "构图方式" },
-      { topic: "colors", name: "色彩风格" },
-      { topic: "aesthetic", name: "美学风格" },
-      { topic: "background", name: "背景类型" },
-      { topic: "posture", name: "姿态" },
-      { topic: "gestures", name: "手势" },
-      { topic: "focus", name: "焦点/景深" },
-    ];
   },
 });
 
@@ -945,7 +946,6 @@ const allToolDefinitions = {
   search_civitai_tags: searchCivitaiTags,
   web_search: webSearch,
   search_danbooru_tags: searchDanbooruTags,
-  list_danbooru_topics: listDanbooruTopics,
   browse_danbooru_tags: browseDanbooruTags,
   get_danbooru_tag: getDanbooruTag,
 };
@@ -958,17 +958,21 @@ interface ToolConfig {
 async function loadEnabledTools(): Promise<
   Record<string, (typeof allToolDefinitions)[keyof typeof allToolDefinitions]>
 > {
+  // File defaults are the source of truth for which tools exist.
+  // DB config only overrides enabled/disabled for tools it knows about.
   const toolsJson = await getConfig("agent_tools");
-  let tools: ToolConfig[];
-  if (toolsJson) {
-    tools = JSON.parse(toolsJson);
-  } else {
-    const configPath = join(import.meta.dirname, "prompts", "modules.json");
-    const config: { tools: ToolConfig[] } = JSON.parse(
-      readFileSync(configPath, "utf-8"),
-    );
-    tools = config.tools;
-  }
+  const configPath = join(import.meta.dirname, "prompts", "modules.json");
+  const config: { tools: ToolConfig[] } = JSON.parse(
+    readFileSync(configPath, "utf-8"),
+  );
+  const fileTools: ToolConfig[] = config.tools;
+  const dbOverrides: ToolConfig[] = toolsJson ? JSON.parse(toolsJson) : [];
+  const overrideMap = new Map(dbOverrides.map((t) => [t.name, t]));
+  const tools = fileTools.map((t) =>
+    overrideMap.has(t.name)
+      ? { ...t, enabled: overrideMap.get(t.name)!.enabled }
+      : t,
+  );
   const enabled = new Set(tools.filter((t) => t.enabled).map((t) => t.name));
   const result: Record<
     string,
