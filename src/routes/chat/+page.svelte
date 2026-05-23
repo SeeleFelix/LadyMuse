@@ -1171,7 +1171,26 @@
                 <div
                   class="mt-1 flex items-center gap-2 text-[10px] text-zinc-600 px-1"
                 >
-                  <span>{cost.inputTokens + cost.outputTokens} tokens</span>
+                  <span
+                    >{cost.inputTokens > 1000
+                      ? (cost.inputTokens / 1000).toFixed(1) + "K"
+                      : cost.inputTokens}
+                    in</span
+                  >
+                  <span
+                    >{cost.outputTokens > 1000
+                      ? (cost.outputTokens / 1000).toFixed(1) + "K"
+                      : cost.outputTokens}
+                    out</span
+                  >
+                  {#if cost.cacheHitTokens > 0}
+                    <span class="text-emerald-700"
+                      >{cost.cacheHitTokens > 1000
+                        ? (cost.cacheHitTokens / 1000).toFixed(1) + "K"
+                        : cost.cacheHitTokens}
+                      cached</span
+                    >
+                  {/if}
                   <span class="text-zinc-700">|</span>
                   <span class="text-zinc-500"
                     >{cost.currency === "CNY" ? "¥" : "$"}{cost.cost.toFixed(
