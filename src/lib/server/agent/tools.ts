@@ -756,85 +756,167 @@ export const findReferences = tool({
   },
 });
 
+async function enrichDanbooruTags(
+  nameScores: Map<string, number>,
+  maxTags: number,
+) {
+  const names = [...nameScores.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, maxTags)
+    .map(([name]) => name);
+
+  if (names.length === 0) return { tags: [], relatedTags: [] };
+
+  const tags = await db
+    .select({
+      name: danbooruTags.name,
+      body: danbooruTags.body,
+      postCount: danbooruTags.postCount,
+    })
+    .from(danbooruTags)
+    .where(or(...names.map((n) => eq(danbooruTags.name, n))));
+
+  const aliasRows = await db
+    .select({
+      consequentName: danbooruTagAliases.consequentName,
+      antecedentName: danbooruTagAliases.antecedentName,
+    })
+    .from(danbooruTagAliases)
+    .where(or(...names.map((n) => eq(danbooruTagAliases.consequentName, n))));
+  const aliasMap = new Map<string, string[]>();
+  for (const a of aliasRows) {
+    const list = aliasMap.get(a.consequentName) ?? [];
+    list.push(a.antecedentName);
+    aliasMap.set(a.consequentName, list);
+  }
+
+  const implRows = await db
+    .select({
+      antecedentName: danbooruTagImplications.antecedentName,
+      consequentName: danbooruTagImplications.consequentName,
+    })
+    .from(danbooruTagImplications)
+    .where(
+      or(...names.map((n) => eq(danbooruTagImplications.antecedentName, n))),
+    );
+  const implMap = new Map<string, string[]>();
+  const allRelated = new Set<string>();
+  for (const i of implRows) {
+    const list = implMap.get(i.antecedentName) ?? [];
+    list.push(i.consequentName);
+    implMap.set(i.antecedentName, list);
+    if (!nameScores.has(i.consequentName)) allRelated.add(i.consequentName);
+  }
+
+  return {
+    tags: tags
+      .map((t) => ({
+        name: t.name,
+        description: stripWikiBody(t.body || "").slice(0, 250),
+        postCount: t.postCount,
+        score: Math.round((nameScores.get(t.name) ?? 0) * 10000) / 10000,
+        aliases: aliasMap.get(t.name) ?? [],
+        implies: implMap.get(t.name) ?? [],
+      }))
+      .sort((a, b) => b.score - a.score),
+    relatedTags: [...allRelated].slice(0, 15),
+  };
+}
+
 export const searchDanbooruTags = tool({
   description:
-    "搜索 Danbooru 标签知识库。用自然语言描述视觉概念，返回匹配的标签名、描述和使用频率。标签名可直接用于 prompt。可选的 keyword 参数用于模糊匹配标签名。",
+    "语义搜索 Danbooru 标签。传入各视觉维度的英文描述，通过向量相似度发现语义相关的标签。用于找到你可能没想到但视觉上相关的标签。一次性传入所有维度描述。",
   inputSchema: z.object({
-    query: z.string().describe("自然语言描述，如'soft cinematic lighting'"),
-    keyword: z.string().optional().describe("可选的标签名关键词模糊匹配"),
+    queries: z
+      .array(z.string())
+      .min(1)
+      .max(5)
+      .describe(
+        "各视觉维度的英文描述，如 'soft warm backlighting casting golden rim light'",
+      ),
   }),
-  execute: async ({ query, keyword }) => {
-    const queryEmbedding = await generateEmbedding(query);
-    const rows = vecSearch("vec_danbooru", queryEmbedding, 20);
+  execute: async ({ queries }) => {
+    const allNames = new Map<string, number>();
 
-    if (rows.length === 0) {
-      return "标签向量索引为空。请先生成 embedding。";
+    for (const description of queries) {
+      const embedding = await generateEmbedding(description);
+      const rows = vecSearch("vec_danbooru", embedding, 20);
+      for (const r of rows) {
+        const score = 1 - (r.distance * r.distance) / 2;
+        if (score > 0.3) {
+          const prev = allNames.get(r.id) ?? 0;
+          if (score > prev) allNames.set(r.id, score);
+        }
+      }
     }
 
-    const scoreMap = new Map(
-      rows.map((r) => [r.id, 1 - (r.distance * r.distance) / 2]),
-    );
-    let names = rows.filter((r) => scoreMap.get(r.id)! > 0.3).map((r) => r.id);
+    if (allNames.size === 0) {
+      return "未找到匹配的标签。尝试用更具体的英文视觉描述。";
+    }
 
-    if (keyword) {
-      const token = keyword.replace(/\s+/g, "_");
-      const kwResults = await db
+    return enrichDanbooruTags(allNames, 60);
+  },
+});
+
+export const lookupDanbooruTags = tool({
+  description:
+    "精确查找 Danbooru 标签。传入关键词列表，通过标签名精确匹配、模糊匹配和别名展开查找。用于确认你已知的概念对应的标签。支持同时查找多个关键词。",
+  inputSchema: z.object({
+    keywords: z
+      .array(z.string())
+      .min(1)
+      .max(10)
+      .describe("标签名关键词，如 ['glasses', 'smoking', 'rain', 'night']"),
+  }),
+  execute: async ({ keywords }) => {
+    const allNames = new Map<string, number>();
+
+    for (const keyword of keywords) {
+      const token = keyword.toLowerCase().replace(/\s+/g, "_");
+
+      // Exact match = 1.0
+      const exact = await db
+        .select({ name: danbooruTags.name })
+        .from(danbooruTags)
+        .where(eq(danbooruTags.name, token))
+        .limit(1);
+      for (const r of exact) {
+        allNames.set(r.name, 1.0);
+      }
+
+      // LIKE match = 0.7
+      const likeResults = await db
         .select({ name: danbooruTags.name })
         .from(danbooruTags)
         .where(
           or(
-            eq(danbooruTags.name, token),
             like(danbooruTags.name, `${token}\\_%`),
             like(danbooruTags.name, `%\\_${token}`),
             like(danbooruTags.name, `%\\_${token}\\_%`),
           ),
         )
-        .limit(20);
-      for (const r of kwResults) {
-        if (!names.includes(r.name)) names.push(r.name);
+        .limit(10);
+      for (const r of likeResults) {
+        if (!allNames.has(r.name)) allNames.set(r.name, 0.7);
+      }
+
+      // Alias expansion = 0.9
+      const aliasRows = await db
+        .select({ consequentName: danbooruTagAliases.consequentName })
+        .from(danbooruTagAliases)
+        .where(eq(danbooruTagAliases.antecedentName, token))
+        .limit(5);
+      for (const a of aliasRows) {
+        if (!allNames.has(a.consequentName))
+          allNames.set(a.consequentName, 0.9);
       }
     }
 
-    if (names.length === 0) {
-      return "未找到匹配的标签。尝试换一种描述方式，或用 keyword 参数模糊匹配。";
+    if (allNames.size === 0) {
+      return "未找到匹配的标签。检查关键词拼写，使用下划线格式的标签名。";
     }
 
-    const tags = await db
-      .select({
-        name: danbooruTags.name,
-        body: danbooruTags.body,
-        postCount: danbooruTags.postCount,
-      })
-      .from(danbooruTags)
-      .where(or(...names.slice(0, 20).map((n) => eq(danbooruTags.name, n))));
-
-    const implRows = await db
-      .select({
-        consequentName: danbooruTagImplications.consequentName,
-      })
-      .from(danbooruTagImplications)
-      .where(
-        or(
-          ...tags.map((t) =>
-            eq(danbooruTagImplications.antecedentName, t.name),
-          ),
-        ),
-      );
-
-    const relatedTags = [...new Set(implRows.map((r) => r.consequentName))];
-
-    return {
-      tags: tags
-        .map((t) => ({
-          name: t.name,
-          description: stripWikiBody(t.body || "").slice(0, 400),
-          postCount: t.postCount,
-          score: Math.round((scoreMap.get(t.name) ?? 0) * 10000) / 10000,
-        }))
-        .sort((a, b) => b.score - a.score),
-      relatedTags:
-        relatedTags.length > 0 ? relatedTags.slice(0, 10) : undefined,
-    };
+    return enrichDanbooruTags(allNames, 30);
   },
 });
 
@@ -946,6 +1028,7 @@ const allToolDefinitions = {
   search_civitai_tags: searchCivitaiTags,
   web_search: webSearch,
   search_danbooru_tags: searchDanbooruTags,
+  lookup_danbooru_tags: lookupDanbooruTags,
   browse_danbooru_tags: browseDanbooruTags,
   get_danbooru_tag: getDanbooruTag,
 };

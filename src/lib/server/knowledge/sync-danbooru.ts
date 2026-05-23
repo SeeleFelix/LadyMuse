@@ -77,16 +77,21 @@ export async function importDanbooru() {
     updateProgress({ stage: "importing", total: wikis.length, done: 0 });
     let inserted = 0;
 
-    const insertStmt = sqlite.prepare(
-      `INSERT OR REPLACE INTO danbooru_tags (name, post_count, body, other_names, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+    // Use ON CONFLICT to preserve embedding and id on re-import
+    const upsertStmt = sqlite.prepare(
+      `INSERT INTO danbooru_tags (name, post_count, body, other_names, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(name) DO UPDATE SET
+         post_count = excluded.post_count,
+         body = excluded.body,
+         other_names = excluded.other_names,
+         updated_at = excluded.updated_at`,
     );
     const now = new Date().toISOString();
 
-    // Run without transaction — WAL mode handles individual inserts efficiently
     for (const wiki of wikis) {
       if (!tags.has(wiki.title)) continue;
-      insertStmt.run(
+      upsertStmt.run(
         wiki.title,
         tags.get(wiki.title) ?? 0,
         wiki.body,

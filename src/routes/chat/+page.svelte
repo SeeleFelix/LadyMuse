@@ -369,7 +369,7 @@
     messages = [...messages, { role: "assistant", content: "" }];
 
     let textTargetIdx = messages.length - 1;
-    let pendingToolIdx = -1;
+    let pendingToolMap = new Map<string, number>();
     let costIdx = textTargetIdx;
 
     const apiMessages = messages
@@ -438,7 +438,7 @@
                     toolCallId: event.toolCallId,
                   };
                   messages = [...messages, msg];
-                  pendingToolIdx = messages.length - 1;
+                  pendingToolMap.set(event.toolCallId, messages.length - 1);
                   optionsDisabled = false;
                 } else {
                   const toolName = TOOL_NAMES[event.name] || event.name;
@@ -452,16 +452,17 @@
                     ),
                   };
                   messages = [...messages, toolMsg];
-                  pendingToolIdx = messages.length - 1;
+                  pendingToolMap.set(event.toolCallId, messages.length - 1);
                 }
               } else if (event.type === "tool-result") {
+                const toolIdx = event.toolCallId
+                  ? pendingToolMap.get(event.toolCallId)
+                  : undefined;
                 if (event.name === "present_options") {
-                  // Clear toolCallId so old buttons stay disabled when
-                  // a new present_options resets optionsDisabled later.
-                  if (pendingToolIdx >= 0) {
-                    messages[pendingToolIdx].toolCallId = undefined;
+                  if (toolIdx !== undefined) {
+                    messages[toolIdx].toolCallId = undefined;
+                    pendingToolMap.delete(event.toolCallId);
                   }
-                  pendingToolIdx = -1;
                   const newAssistant: ChatMessage = {
                     role: "assistant",
                     content: "",
@@ -469,20 +470,19 @@
                   messages = [...messages, newAssistant];
                   textTargetIdx = messages.length - 1;
                   costIdx = textTargetIdx;
-                } else if (pendingToolIdx >= 0) {
+                } else if (toolIdx !== undefined) {
+                  pendingToolMap.delete(event.toolCallId);
                   const toolName = TOOL_NAMES[event.name] || event.name;
                   const summary = summarizeToolResult(event.output);
-                  const detail = messages[pendingToolIdx].toolDetail || "";
+                  const detail = messages[toolIdx].toolDetail || "";
                   const fullDetail =
                     detail +
                     "\n\n--- 结果 ---\n" +
                     (typeof event.output === "string"
                       ? event.output
                       : JSON.stringify(event.output, null, 2));
-                  messages[pendingToolIdx].content =
-                    `🔍 ${toolName}: ${summary}`;
-                  messages[pendingToolIdx].toolDetail = fullDetail;
-                  pendingToolIdx = -1;
+                  messages[toolIdx].content = `🔍 ${toolName}: ${summary}`;
+                  messages[toolIdx].toolDetail = fullDetail;
                   const newAssistant: ChatMessage = {
                     role: "assistant",
                     content: "",

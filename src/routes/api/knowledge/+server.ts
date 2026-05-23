@@ -21,11 +21,10 @@ export const GET: RequestHandler = async ({ url }) => {
 
     const rows = sqlite
       .prepare(
-        `SELECT v.id, v.distance
-         FROM vec_concepts v
-         WHERE v.embedding MATCH ? AND k = ?
-         ORDER BY v.distance
-         LIMIT 20`,
+        `SELECT id, distance
+         FROM vec_concepts
+         WHERE embedding MATCH ? AND k = ?
+         ORDER BY distance`,
       )
       .all(blob, 20) as { id: string; distance: number }[];
 
@@ -58,7 +57,7 @@ export const GET: RequestHandler = async ({ url }) => {
         subCategory: c.subCategory,
         snippet: (c.visualDescription || "").slice(0, 150),
         hasEmbedding: c.embedding ? 1 : 0,
-        score: scoreMap.get(c.name) ?? 0,
+        score: Math.round((scoreMap.get(c.name) ?? 0) * 10000) / 10000,
       }))
       .filter((c) => c.score > 0.5)
       .sort((a, b) => b.score - a.score);

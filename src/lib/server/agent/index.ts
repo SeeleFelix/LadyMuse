@@ -107,7 +107,10 @@ export async function* chatStream(
   }
 
   const startTime = Date.now();
-  const systemPrompt = await buildSystemPrompt();
+  const lastUserMsg = [...formattedMessages]
+    .reverse()
+    .find((m) => m.role === "user")?.content;
+  const systemPrompt = await buildSystemPrompt(lastUserMsg);
   const promptBuildMs = Date.now() - startTime;
   const streamStart = Date.now();
 
@@ -175,6 +178,7 @@ export async function* chatStream(
         yield JSON.stringify({
           type: "tool-result",
           name: event.toolName,
+          toolCallId: (event as any).toolCallId,
           output,
         }) + "\n";
       }

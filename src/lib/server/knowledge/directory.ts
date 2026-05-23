@@ -1,28 +1,18 @@
 import { db } from "../db";
 import { artConcepts, artPatterns } from "../db/schema";
 
-export async function buildKnowledgeDirectory(): Promise<string> {
-  // 概念：按 category → sub_category 分组
-  const concepts = await db
-    .select({
-      category: artConcepts.category,
-      subCategory: artConcepts.subCategory,
-      name: artConcepts.name,
-    })
-    .from(artConcepts)
-    .orderBy(artConcepts.category, artConcepts.subCategory, artConcepts.name);
+export interface ConceptDetail {
+  name: string;
+  nameZh: string | null;
+  category: string;
+  subCategory: string | null;
+  visualDescription: string | null;
+  score: number;
+}
 
-  // 按 category → sub_category 分组
-  const grouped: Record<string, Record<string, string[]>> = {};
-  for (const c of concepts) {
-    const cat = c.category;
-    const sub = c.subCategory || "other";
-    if (!grouped[cat]) grouped[cat] = {};
-    if (!grouped[cat][sub]) grouped[cat][sub] = [];
-    grouped[cat][sub].push(c.name);
-  }
-
-  // 维度名中文映射
+export function formatCompactDirectory(
+  categoryCounts: Record<string, number>,
+): string {
   const dimNames: Record<string, string> = {
     lighting: "光影",
     composition: "构图",
@@ -35,14 +25,41 @@ export async function buildKnowledgeDirectory(): Promise<string> {
   };
 
   let dir = "## 知识库目录\n\n";
-  for (const [cat, subs] of Object.entries(grouped)) {
+  for (const [cat, count] of Object.entries(categoryCounts)) {
     const catName = dimNames[cat] || cat;
-    dir += `### ${catName} (${cat})\n`;
-    for (const [sub, names] of Object.entries(subs)) {
-      dir += `  ${sub}: ${names.join(", ")}\n`;
-    }
-    dir += "\n";
+    dir += `- ${catName} (${cat}): ${count} concepts\n`;
   }
+  return dir;
+}
+
+export function formatRelatedConcepts(concepts: ConceptDetail[]): string {
+  if (concepts.length === 0) return "";
+
+  let section = "### 当前意图相关概念\n\n";
+  for (const c of concepts) {
+    const zh = c.nameZh ? ` (${c.nameZh})` : "";
+    const cat = c.subCategory ? `${c.category} > ${c.subCategory}` : c.category;
+    const snippet = c.visualDescription
+      ? c.visualDescription.slice(0, 120)
+      : "";
+    section += `- **${c.name}**${zh} [${cat}] — ${snippet}\n`;
+  }
+  return section;
+}
+
+export async function buildKnowledgeDirectory(): Promise<string> {
+  const concepts = await db
+    .select({
+      category: artConcepts.category,
+    })
+    .from(artConcepts);
+
+  const categoryCounts: Record<string, number> = {};
+  for (const c of concepts) {
+    categoryCounts[c.category] = (categoryCounts[c.category] || 0) + 1;
+  }
+
+  let dir = formatCompactDirectory(categoryCounts);
 
   // 模式清单
   const patterns = await db
