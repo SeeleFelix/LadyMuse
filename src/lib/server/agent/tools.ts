@@ -18,14 +18,7 @@ import {
 import { eq, like, or, and, desc, sql } from "drizzle-orm";
 import { generateEmbedding } from "../knowledge/embedding";
 import { sqlite } from "../db";
-import {
-  searchModels,
-  searchImages,
-  searchImagesWithFallback,
-  fetchModelImages,
-  fetchPopularImages,
-  fetchTags,
-} from "../civitai";
+import { searchImages, searchModels } from "../civitai";
 import { searxngSearch } from "../searxng";
 import { getConfig } from "../config";
 
@@ -278,93 +271,174 @@ export const presentOptions = tool({
   },
 });
 
-export const searchCivitaiModels = tool({
-  description:
-    "从 Civitai 搜索 AI 图像模型。查找 Checkpoint、LoRA 等模型及其描述、标签、下载量。当用户想了解某个风格或主题有哪些可用模型时使用。",
-  inputSchema: z.object({
-    query: z
-      .string()
-      .describe("搜索关键词，英文，如 anime、realistic portrait"),
-    limit: z.number().optional().describe("返回数量，默认 5"),
-  }),
-  execute: async ({ query, limit = 5 }) => {
-    const result = await searchModels(query, limit);
-    return result.items.map((m) => ({
-      id: m.id,
-      name: m.name,
-      type: m.type,
-      baseModel: m.baseModel,
-      downloads: m.stats?.downloadCount,
-      tags: m.tags?.slice(0, 10),
-      description: m.description?.slice(0, 200),
-    }));
-  },
-});
+export const searchCivitaiImages = tool({
+  description: `Search Civitai for AI-generated images with prompts and generation parameters. Use this to find real prompt references, study how others write prompts for specific styles/subjects, or browse a model's gallery.
 
-export const searchCivitaiPrompts = tool({
-  description:
-    "从 Civitai 搜索真实的高质量提示词参考。搜索约 30 张高赞图片，提取完整 prompt 和参数，返回给你分析。你应该从中提炼出有效的关键词模式、常用参数配置、视觉概念，然后用你自己的理解重新组织成符合用户风格偏好的提示词。重要：query 必须使用英文关键词，如果用户说的是中文，请先翻译成英文再搜索。",
+Tips:
+- query must be English keywords
+- Use different sort+period combinations for variety: sort="Newest" period="Week" for recent trends, sort="Most Comments" for discussion-worthy works
+- Use modelId to browse a specific model or LoRA's gallery
+- Use baseModels to filter by target architecture (e.g. "Illustrious", "SDXL 1.0", "Flux.1 D")
+- Use username to study a specific creator's prompting style
+- Use cursor to paginate through more results
+- Results include image URLs`,
   inputSchema: z.object({
     query: z
       .string()
+      .optional()
       .describe(
-        "搜索关键词，必须使用英文，如 crying girl、landscape sunset、cyberpunk city",
+        "Search keywords, English. Don't pass this when browsing by modelId or username.",
       ),
+    sort: z
+      .enum([
+        "Most Reactions",
+        "Most Comments",
+        "Most Collected",
+        "Newest",
+        "Oldest",
+      ])
+      .optional()
+      .describe("Sort order, default 'Most Reactions'"),
+    period: z
+      .enum(["AllTime", "Year", "Month", "Week", "Day"])
+      .optional()
+      .describe("Time window, default 'AllTime'"),
+    baseModels: z
+      .string()
+      .optional()
+      .describe(
+        "Filter by base model: Illustrious, SDXL 1.0, SD 1.5, Pony, Flux.1 D, etc.",
+      ),
+    modelId: z
+      .number()
+      .optional()
+      .describe("Images from a specific model's gallery"),
+    username: z.string().optional().describe("Images from a specific creator"),
+    limit: z
+      .number()
+      .min(1)
+      .max(20)
+      .optional()
+      .describe("Results per page, default 10, max 20"),
+    cursor: z
+      .string()
+      .optional()
+      .describe("Pagination cursor from previous response"),
   }),
-  execute: async ({ query }) => {
+  execute: async (params) => {
     try {
-      const { items, fallback } = await searchImagesWithFallback(query, 30);
+      const result = await searchImages({
+        query: params.query,
+        sort: params.sort,
+        period: params.period,
+        baseModels: params.baseModels,
+        modelId: params.modelId,
+        username: params.username,
+        limit: params.limit ?? 10,
+        cursor: params.cursor,
+      });
 
-      const prompts = items
-        .filter((img) => img.meta?.prompt)
-        .slice(0, 30)
-        .map((img) => ({
-          prompt: img.meta!.prompt,
-          negativePrompt: img.meta!.negativePrompt || undefined,
-          sampler: img.meta!.sampler,
-          cfgScale: img.meta!.cfgScale,
-          steps: img.meta!.steps,
-          size: img.meta!.Size,
-          baseModel: img.baseModel,
-          likes: img.stats?.likeCount,
-        }));
+      const images = result.items.map((img) => ({
+        id: img.id,
+        url: img.url,
+        width: img.width,
+        height: img.height,
+        baseModel: img.baseModel,
+        likes: img.stats?.likeCount,
+        username: img.username,
+        createdAt: img.createdAt,
+        meta: img.meta
+          ? {
+              prompt: img.meta.prompt,
+              negativePrompt: img.meta.negativePrompt || undefined,
+              sampler: img.meta.sampler,
+              cfgScale: img.meta.cfgScale,
+              steps: img.meta.steps,
+              size: img.meta.Size,
+              resources: img.meta.resources,
+            }
+          : null,
+      }));
 
-      if (prompts.length === 0) {
-        return {
-          notice: "未找到包含提示词的图片。请直接基于你的专业知识生成提示词。",
-          query,
-        };
-      }
+      const withPrompt = images.filter((i) => i.meta?.prompt).length;
 
       return {
-        query,
-        fallback,
-        totalResults: prompts.length,
-        prompts,
+        images,
+        nextCursor: result.nextCursor,
+        meta: {
+          returned: images.length,
+          withPrompt,
+          withoutPrompt: images.length - withPrompt,
+        },
       };
     } catch (e: any) {
       return {
-        error: `Civitai 搜索失败: ${e.message}`,
-        query,
-        notice: "请直接基于你的专业知识生成提示词。",
+        error: `Civitai search failed: ${e.message}`,
+        notice: "Please generate prompts based on your professional knowledge.",
       };
     }
   },
 });
 
-export const searchCivitaiTags = tool({
+export const searchCivitaiModels = tool({
   description:
-    "从 Civitai 搜索标签。查找与图像生成相关的标签关键词及其使用频次。当用户需要了解某个标签的流行度或寻找相关标签时使用。",
+    "Search Civitai for AI image models (checkpoints, LoRAs, etc.). Returns model info: name, type, base model, tags, stats, description. To see a model's generated images with prompts, use search_civitai_images with that model's ID.",
   inputSchema: z.object({
-    query: z.string().describe("搜索关键词，英文"),
-    limit: z.number().optional().describe("返回数量，默认 10"),
+    query: z.string().describe("Search by model name, English"),
+    types: z
+      .string()
+      .optional()
+      .describe(
+        "Model type filter: Checkpoint, LORA, DoRA, Controlnet, Upscaler, etc.",
+      ),
+    baseModels: z
+      .string()
+      .optional()
+      .describe("Filter by base model: Illustrious, SDXL 1.0, SD 1.5, etc."),
+    sort: z
+      .enum(["Highest Rated", "Most Downloaded", "Newest", "Most Liked"])
+      .optional()
+      .describe("Sort order, default 'Highest Rated'"),
+    period: z
+      .enum(["AllTime", "Year", "Month", "Week", "Day"])
+      .optional()
+      .describe("Time window, default 'AllTime'"),
+    limit: z
+      .number()
+      .min(1)
+      .max(10)
+      .optional()
+      .describe("Results count, default 5, max 10"),
   }),
-  execute: async ({ query, limit = 10 }) => {
-    const result = await fetchTags(query, limit);
-    return result.items.map((t) => ({
-      name: t.name,
-      modelCount: t.modelCount,
-    }));
+  execute: async (params) => {
+    try {
+      const result = await searchModels({
+        query: params.query,
+        types: params.types,
+        baseModels: params.baseModels,
+        sort: params.sort,
+        period: params.period,
+        limit: params.limit ?? 5,
+      });
+
+      return {
+        models: result.items.map((m) => ({
+          id: m.id,
+          name: m.name,
+          type: m.type,
+          baseModel: m.baseModel,
+          tags: m.tags?.slice(0, 15),
+          downloads: m.stats?.downloadCount,
+          likes: m.stats?.thumbsUpCount,
+          description: m.description?.slice(0, 300),
+        })),
+      };
+    } catch (e: any) {
+      return {
+        error: `Civitai model search failed: ${e.message}`,
+        notice: "Please proceed without model information.",
+      };
+    }
   },
 });
 
@@ -1023,9 +1097,8 @@ const allToolDefinitions = {
   update_user_profile: updateUserProfile,
   save_session_summary: saveSessionSummary,
   present_options: presentOptions,
+  search_civitai_images: searchCivitaiImages,
   search_civitai_models: searchCivitaiModels,
-  search_civitai_prompts: searchCivitaiPrompts,
-  search_civitai_tags: searchCivitaiTags,
   web_search: webSearch,
   search_danbooru_tags: searchDanbooruTags,
   lookup_danbooru_tags: lookupDanbooruTags,
