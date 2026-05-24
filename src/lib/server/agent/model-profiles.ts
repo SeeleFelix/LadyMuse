@@ -144,7 +144,7 @@ const profiles: ModelProfile[] = [
   {
     id: "anima",
     name: "Anima",
-    promptStyle: "tags",
+    promptStyle: "hybrid",
     weightSyntax: "parentheses",
     defaultParams: {
       sampler: "er_sde",
@@ -155,18 +155,23 @@ const profiles: ModelProfile[] = [
       height: 1024,
     },
     stepRange: [30, 50],
-    cfgRange: [4.0, 5.0],
-    resolutions: ["1024×1024", "896×1152", "1152×896"],
+    cfgRange: [4, 6],
+    resolutions: [
+      "1024×1024",
+      "832×1216",
+      "1216×832",
+      "896×1152",
+      "1152×896",
+      "1216×896",
+    ],
     negativeRequired: true,
     tips:
-      "Anima 是 CircleStone Labs 与 Comfy Org 合作开发的 2B 参数动漫/插画专用模型，基于 NVIDIA Cosmos 架构。" +
-      "使用 Danbooru 风格标签和/或自然语言描述，可混用。" +
-      "标签用小写、空格代替下划线（score 标签除外）。当 Danbooru 和 Gelbooru 标签不同时，优先使用 Gelbooru 版本。" +
-      "推荐 er_sde 采样器，30-50 步，CFG 4-5。分辨率约 1MP。" +
-      "推荐正向前缀：masterpiece, best quality, score_7, safe。" +
-      "推荐负面：worst quality, low quality, score_1, score_2, score_3, artist name。" +
-      "画师标签前缀 @（如 @big chungus）。" +
-      "支持时间标签（year 2025, newest, recent, mid, early, old）。",
+      "Anima 是 CircleStone Labs 与 Comfy Org 合作的 2B 参数动漫/插画模型，基于 NVIDIA Cosmos 架构，使用 Qwen3 0.6B 文本编码器（非 CLIP）。" +
+      "支持 Danbooru 标签与自然语言任意混用。标签用小写、空格代替下划线（score 标签除外）。Danbooru 与 Gelbooru 标签不同时优先 Gelbooru 版本。" +
+      "支持 (keyword:weight) 权重语法，但需比 SDXL 更高的权重值（如 (chibi:2)）。画师标签必须加 @ 前缀（如 @big chungus），否则效果很弱。训练时有 random tag dropout，不需要穷举所有标签。" +
+      "自然语言至少 2 句，太短会产生意外结果。多角色时每个角色必须命名+描述外观。Base 版本无美学调优，不加质量/画师标签时风格非常朴素。" +
+      "采样器选择：er_sde（默认，锐利线条平色）、euler_a（柔和细线偏 2.5D，CFG 可略高）、dpmpp_2m_sde_gpu（更多样创意，偶尔狂野）。30-50 步，CFG 4-6。" +
+      "推荐正向前缀：masterpiece, best quality, score_7, safe。推荐负面：worst quality, low quality, score_1, score_2, score_3, artist name。",
   },
 ];
 
