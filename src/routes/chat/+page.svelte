@@ -93,6 +93,11 @@
       name: "Illustrious XL",
       defaultStyle: "tags" as const,
     },
+    {
+      id: "anima",
+      name: "Anima",
+      defaultStyle: "hybrid" as const,
+    },
   ];
 
   const providers = [
