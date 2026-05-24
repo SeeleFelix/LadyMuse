@@ -115,6 +115,8 @@
     get_user_profile: "获取用户画像",
     update_user_profile: "更新用户画像",
     save_session_summary: "保存会话摘要",
+    search_civitai_images: "CivitAI · 搜索图片",
+    search_civitai_models: "CivitAI · 搜索模型",
   };
 
   const marked = new Marked({
@@ -630,9 +632,8 @@
     get_user_profile: "获取用户画像",
     update_user_profile: "更新用户画像",
     save_session_summary: "保存会话摘要",
-    search_civitai_models: "搜索 CivitAI 模型",
-    search_civitai_prompts: "搜索 CivitAI 提示词",
-    search_civitai_tags: "搜索 CivitAI 标签",
+    search_civitai_images: "CivitAI · 搜索图片",
+    search_civitai_models: "CivitAI · 搜索模型",
     web_search: "网页搜索",
     present_options: "选项交互",
     search_danbooru_tags: "Danbooru · 搜索标签",
