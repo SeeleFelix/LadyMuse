@@ -51,6 +51,10 @@
     "illustrious": {
       "file": "illustrious.md",
       "enabled": true
+    },
+    "anima": {
+      "file": "anima.md",
+      "enabled": true
     }
   },
   "tools": [
