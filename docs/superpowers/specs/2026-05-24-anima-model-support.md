@@ -2,29 +2,33 @@
 
 ## Goal
 
-Add a prompt assembly module (`anima.md`) for the Anima model, following the same pattern as `zit.md` and `illustrious.md`. Fix incorrect fields in the existing `model-profiles.ts` config.
+Add a prompt assembly module (`anima.md`) for the Anima model and fix the existing `model-profiles.ts` config, following the same pattern as `zit.md` and `illustrious.md`. Wire Anima into all integration points: model profile, prompt module, module registry, and UI model selector.
 
 ## Research Sources
 
-- HuggingFace: circlestone-labs/Anima (official model card)
-- Civitai: model page + articles about Anima settings
-- Reddit: community discussions on Anima vs Illustrious, sampler comparisons, composition issues
-- Community: Anima 2B Style Explorer, LoRA trainer reports
+- **Primary**: Civitai official model page (models/2458426/anima)
+- HuggingFace: circlestone-labs/Anima (model files, encoder/VAE info)
 
 ## Key Model Characteristics
 
-Anima is NOT another SDXL finetune. It's built on NVIDIA Cosmos (DiT) with a Qwen3 0.6B text encoder. This fundamentally changes how prompting works:
+Anima is a 2B parameter model built on NVIDIA Cosmos-Predict2-2B-Text2Image, using a Qwen3 0.6B text encoder (NOT CLIP). This fundamentally changes how prompting works compared to SDXL derivatives:
 
-- Supports three input modes: Danbooru tags, natural language, and free mixing
-- Uses Gelbooru tags (not Danbooru) when they differ
-- Tags use spaces (not underscores), except score tags
-- Artist tags require mandatory `@` prefix
-- Weight syntax needs higher values than SDXL: `(tag:2)` is reasonable
-- DPM samplers don't work at all — use er_sde
-- Has repetitive composition tendency across seeds
-- Multi-artist prompts cause style dilution
-- Supports temporal tags (year, newest, recent, etc.)
-- Dataset tags for non-anime styles (ye-pop, deviantart)
+- **Hybrid prompting**: Danbooru tags, natural language captions, or arbitrary mixing
+- **Tag format**: lowercase, spaces instead of underscores (exception: score tags use underscores)
+- **Weight syntax**: `(keyword:weight)` works, but needs higher weights than SDXL (e.g. `(chibi:2)`)
+- **Gelbooru priority**: when Danbooru and Gelbooru tags differ, prefer Gelbooru
+- **Artist tags**: mandatory `@` prefix (`@big chungus`), effect is very weak without it
+- **Tag dropout**: trained with random tag dropout — exhaustive tagging is unnecessary
+- **Safety tags**: `safe`, `sensitive`, `nsfw`, `explicit`
+- **Time tags**: `year 2025`, `year 2024`, `newest`, `recent`, `mid`, `early`, `old`
+- **Two quality tag systems**: human-score (`masterpiece`–`worst quality`) and PonyV7 (`score_9`–`score_1`), can mix/match/omit
+- **NL minimum**: at least 2 sentences; extremely short prompts give unexpected results
+- **Multi-character**: must name AND describe appearance per character
+- **Dataset tags**: `ye-pop` / `deviantart` at prompt start + newline, for non-anime styles
+- **Base model**: no aesthetic tuning — plain/neutral without quality/artist tags
+- **Samplers**: `er_sde` (sharp, flat, default), `euler_a` (softer, thinner), `dpmpp_2m_sde_gpu` (creative, varied)
+- **Scheduler**: default ComfyUI schedulers work; `beta57` optional for painterly look
+- **Poor at**: realism (by design), text rendering (single words only), very short prompts
 
 ## Changes
 
@@ -32,37 +36,33 @@ Anima is NOT another SDXL finetune. It's built on NVIDIA Cosmos (DiT) with a Qwe
 
 Corrections:
 - `promptStyle`: `"tags"` → `"hybrid"`
-- `scheduler`: `"normal"` → `"sgm_uniform"`
+- `cfgRange`: `[4.0, 5.0]` → `[4, 6]`
 - Add missing resolutions: `"832×1216"`, `"1216×896"`
-- Expand `tips` with critical info: Gelbooru priority, @ prefix mandatory, higher weights, no DPM, quality tag caveat
+- Rewrite `tips` with: architecture overview, three-sampler comparison, Gelbooru priority, `@` prefix requirement, tag dropout note, NL minimum, safety tag names, base-model plain style warning
 
 ### 2. Create `anima.md` prompt module
 
-Following the same 4-step structure as `zit.md` and `illustrious.md`:
-1. Determine anchor
-2. Description strategy (hybrid: tags + natural language)
-3. Information trade-offs
-4. Conflict checking
-5. Parameter quick reference
-6. Examples (good and bad)
+Same 6-step structure as `zit.md` and `illustrious.md`:
 
-The module must cover Anima-specific behaviors:
-- How to mix tags and natural language effectively
-- Gelbooru tag format rules
-- Artist tag @ prefix usage
-- Weight scaling differences from SDXL
-- Sampler selection and why DPM doesn't work
-- How to avoid repetitive compositions
-- Multi-artist style dilution warning
-- Temporal and dataset tag usage
+1. **Determine anchor** — metadata tag prefix + NL subject sentence (hybrid anchor pattern unique to Anima)
+2. **Description strategy** — metadata as tags (quality/safety/artist/time), content as NL (≥2 sentences), general tags sparingly (tag dropout)
+3. **Information trade-offs** — must include: quality tags, safety tag, NL body ≥2 sentences; optional: year/artist/series; skippable: exhaustive general tags
+4. **Conflict checking** — style/lighting/composition conflicts
+5. **Parameter quick reference** — three-sampler decision table, steps/CFG/resolutions, recommended pos/neg prefixes
+6. **Examples** — good (hybrid with metadata prefix + NL body) and bad (tags-only, NL too short, missing `@`, exhaustive tags)
 
 ### 3. Register in `modules.json`
 
 Add `"anima": { "file": "anima.md", "enabled": true }` to `model_modules`.
 
+### 4. Add to UI model selector
+
+Add `{ id: "anima", name: "Anima", defaultStyle: "hybrid" }` to `imageModelProfiles` in `chat/+page.svelte`.
+
 ## Out of Scope
 
-- LoRA training guidance
-- Turbo LoRA support
+- LoRA training guidance and Turbo LoRA
 - Highres fix / ADetailer configuration
-- Non-anime dataset prompting (ye-pop, deviantart) — mentioned briefly but not detailed
+- `beta57` scheduler setup (requires RES4LYF custom node pack — ComfyUI integration detail)
+- Non-anime dataset prompting (`ye-pop`, `deviantart`) — mentioned as available but not detailed
+- Anima-Turbo support (model not yet released)
