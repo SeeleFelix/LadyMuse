@@ -637,6 +637,7 @@
     web_search: "网页搜索",
     present_options: "选项交互",
     search_danbooru_tags: "Danbooru · 搜索标签",
+    lookup_danbooru_tags: "Danbooru · 查找标签",
     browse_danbooru_tags: "Danbooru · 浏览分类",
     get_danbooru_tag: "Danbooru · 查看标签",
   };
