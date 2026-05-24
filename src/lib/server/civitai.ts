@@ -34,15 +34,7 @@ async function fetchWithFallback(path: string): Promise<any> {
   throw lastError;
 }
 
-export interface CivitaiModel {
-  id: number;
-  name: string;
-  type?: string;
-  baseModel?: string;
-  description?: string;
-  stats?: { downloadCount?: number; thumbsUpCount?: number };
-  tags?: string[];
-}
+// --- Types ---
 
 export interface CivitaiImage {
   id: number;
@@ -50,6 +42,9 @@ export interface CivitaiImage {
   width?: number;
   height?: number;
   baseModel?: string;
+  username?: string;
+  createdAt?: string;
+  stats?: { likeCount?: number; commentCount?: number; heartCount?: number };
   meta?: {
     prompt?: string;
     negativePrompt?: string;
@@ -58,15 +53,19 @@ export interface CivitaiImage {
     steps?: number;
     seed?: number;
     Size?: string;
+    resources?: { name: string; type: string }[];
     [key: string]: any;
   };
-  stats?: { likeCount?: number };
 }
 
-export interface CivitaiTag {
+export interface CivitaiModel {
   id: number;
   name: string;
-  modelCount?: number;
+  type?: string;
+  baseModel?: string;
+  description?: string;
+  tags?: string[];
+  stats?: { downloadCount?: number; thumbsUpCount?: number };
 }
 
 interface PageResult<T> {
@@ -74,130 +73,98 @@ interface PageResult<T> {
   nextCursor?: string;
 }
 
-export async function searchModels(
-  query: string,
-  limit = 20,
-  cursor?: string,
-): Promise<PageResult<CivitaiModel>> {
-  const params = new URLSearchParams({
-    query,
-    limit: String(limit),
-  });
-  if (cursor) params.set("cursor", cursor);
+// --- Images API ---
 
-  const data = await fetchWithFallback(`/api/v1/models?${params.toString()}`);
+export const IMAGE_SORT_OPTIONS = [
+  "Most Reactions",
+  "Most Comments",
+  "Most Collected",
+  "Newest",
+  "Oldest",
+] as const;
+
+export const IMAGE_PERIOD_OPTIONS = [
+  "AllTime",
+  "Year",
+  "Month",
+  "Week",
+  "Day",
+] as const;
+
+export interface SearchImagesParams {
+  query?: string;
+  sort?: (typeof IMAGE_SORT_OPTIONS)[number];
+  period?: (typeof IMAGE_PERIOD_OPTIONS)[number];
+  baseModels?: string;
+  modelId?: number;
+  username?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export async function searchImages(
+  params: SearchImagesParams,
+): Promise<PageResult<CivitaiImage>> {
+  const p = new URLSearchParams();
+  if (params.query) p.set("query", params.query);
+  if (params.sort) p.set("sort", params.sort);
+  if (params.period) p.set("period", params.period);
+  if (params.baseModels) p.set("baseModels", params.baseModels);
+  if (params.modelId != null) p.set("modelId", String(params.modelId));
+  if (params.username) p.set("username", params.username);
+  if (params.limit != null) p.set("limit", String(params.limit));
+  if (params.cursor) p.set("cursor", params.cursor);
+
+  const data = await fetchWithFallback(`/api/v1/images?${p.toString()}`);
+  return {
+    items: data.items || [],
+    nextCursor: data.metadata?.nextCursor,
+  };
+}
+
+// --- Models API ---
+
+export const MODEL_SORT_OPTIONS = [
+  "Highest Rated",
+  "Most Downloaded",
+  "Newest",
+  "Most Liked",
+] as const;
+
+export const MODEL_PERIOD_OPTIONS = IMAGE_PERIOD_OPTIONS;
+
+export interface SearchModelsParams {
+  query: string;
+  types?: string;
+  baseModels?: string;
+  sort?: (typeof MODEL_SORT_OPTIONS)[number];
+  period?: (typeof MODEL_PERIOD_OPTIONS)[number];
+  limit?: number;
+}
+
+export async function searchModels(
+  params: SearchModelsParams,
+): Promise<PageResult<CivitaiModel>> {
+  const p = new URLSearchParams();
+  if (params.query) p.set("query", params.query);
+  if (params.types) p.set("types", params.types);
+  if (params.baseModels) p.set("baseModels", params.baseModels);
+  if (params.sort) p.set("sort", params.sort);
+  if (params.period) p.set("period", params.period);
+  if (params.limit != null) p.set("limit", String(params.limit));
+
+  const data = await fetchWithFallback(`/api/v1/models?${p.toString()}`);
   const items = (data.items || []).map((m: any) => ({
     id: m.id,
     name: m.name,
     type: m.type,
-    baseModel: m.baseModel,
+    baseModel: m.modelVersions?.[0]?.baseModel,
     description: m.description,
-    stats: m.stats,
     tags: m.tags?.map((t: any) => (typeof t === "string" ? t : t.name)),
+    stats: m.stats,
   }));
   return {
     items,
-    nextCursor: data.metadata?.nextCursor,
-  };
-}
-
-export async function searchImages(
-  query: string,
-  limit = 20,
-  cursor?: string,
-): Promise<PageResult<CivitaiImage>> {
-  const params = new URLSearchParams({
-    query,
-    limit: String(limit),
-    sort: "Most Reactions",
-  });
-  if (cursor) params.set("cursor", cursor);
-
-  const data = await fetchWithFallback(`/api/v1/images?${params.toString()}`);
-  return {
-    items: data.items || [],
-    nextCursor: data.metadata?.nextCursor,
-  };
-}
-
-export async function searchImagesWithFallback(
-  query: string,
-  limit = 30,
-): Promise<{ items: CivitaiImage[]; fallback: boolean }> {
-  // 1. Try full query
-  let result = await searchImages(query, limit);
-  if (result.items.length > 0) return { items: result.items, fallback: false };
-
-  // 2. Try with first 2 words
-  const words = query.split(/\s+/).filter(Boolean);
-  if (words.length > 1) {
-    result = await searchImages(words.slice(0, 2).join(" "), limit);
-    if (result.items.length > 0) return { items: result.items, fallback: true };
-  }
-
-  // 3. Try with first word only
-  if (words.length > 2) {
-    result = await searchImages(words[0], limit);
-    if (result.items.length > 0) return { items: result.items, fallback: true };
-  }
-
-  // 4. Fallback to popular images
-  result = await fetchPopularImages(limit);
-  return { items: result.items, fallback: true };
-}
-
-export async function fetchModelImages(
-  modelId: number,
-  limit = 20,
-  cursor?: string,
-): Promise<PageResult<CivitaiImage>> {
-  const params = new URLSearchParams({
-    modelId: String(modelId),
-    limit: String(limit),
-    sort: "Most Reactions",
-  });
-  if (cursor) params.set("cursor", cursor);
-
-  const data = await fetchWithFallback(`/api/v1/images?${params.toString()}`);
-  return {
-    items: data.items || [],
-    nextCursor: data.metadata?.nextCursor,
-  };
-}
-
-export async function fetchPopularImages(
-  limit = 20,
-  cursor?: string,
-): Promise<PageResult<CivitaiImage>> {
-  const params = new URLSearchParams({
-    limit: String(limit),
-    sort: "Most Reactions",
-  });
-  if (cursor) params.set("cursor", cursor);
-
-  const data = await fetchWithFallback(`/api/v1/images?${params.toString()}`);
-  return {
-    items: data.items || [],
-    nextCursor: data.metadata?.nextCursor,
-  };
-}
-
-export async function fetchTags(
-  query: string,
-  limit = 50,
-): Promise<PageResult<CivitaiTag>> {
-  const params = new URLSearchParams({
-    query,
-    limit: String(limit),
-  });
-
-  const data = await fetchWithFallback(`/api/v1/tags?${params.toString()}`);
-  return {
-    items: (data.items || []).map((t: any) => ({
-      id: t.id,
-      name: t.name,
-      modelCount: t.modelCount,
-    })),
     nextCursor: data.metadata?.nextCursor,
   };
 }
