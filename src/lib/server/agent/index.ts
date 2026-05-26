@@ -135,6 +135,13 @@ export async function* chatStream(
   let reasoningEndMs = 0;
   const toolStartTimes = new Map<string, number>();
   const toolTimings: { name: string; durationMs: number }[] = [];
+  let stepNumber = 0;
+  const collectedSteps: Array<{
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cost: number;
+  }> = [];
 
   try {
     for await (const event of result.fullStream) {
@@ -181,6 +188,33 @@ export async function* chatStream(
           toolCallId: (event as any).toolCallId,
           output,
         }) + "\n";
+      } else if (event.type === "finish-step") {
+        const stepUsage = event.usage;
+        const cacheRead =
+          (stepUsage.inputTokenDetails as any)?.cacheReadTokens ?? 0;
+        const stepCostResult = await calculateCost(
+          resolvedProvider,
+          resolvedModel,
+          {
+            inputTokens: stepUsage.inputTokens ?? 0,
+            outputTokens: stepUsage.outputTokens ?? 0,
+            cacheReadTokens: cacheRead,
+          },
+        );
+        stepNumber++;
+        const stepEntry = {
+          inputTokens: stepUsage.inputTokens ?? 0,
+          outputTokens: stepUsage.outputTokens ?? 0,
+          cacheReadTokens: cacheRead,
+          cost: stepCostResult.cost,
+        };
+        collectedSteps.push(stepEntry);
+        yield JSON.stringify({
+          type: "step-usage",
+          stepNumber,
+          ...stepEntry,
+          currency: stepCostResult.currency,
+        }) + "\n";
       }
     }
 
@@ -214,6 +248,7 @@ export async function* chatStream(
       currency: costResult.currency,
       breakdown: costResult.breakdown,
       source: costResult.source,
+      steps: collectedSteps,
       durationMs,
     }) + "\n";
 

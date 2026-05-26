@@ -339,14 +339,8 @@ Tips:
       });
 
       const images = result.items.map((img) => ({
-        id: img.id,
-        url: img.url,
-        width: img.width,
-        height: img.height,
         baseModel: img.baseModel,
         likes: img.stats?.likeCount,
-        username: img.username,
-        createdAt: img.createdAt,
         meta: img.meta
           ? {
               prompt: img.meta.prompt,
@@ -354,22 +348,15 @@ Tips:
               sampler: img.meta.sampler,
               cfgScale: img.meta.cfgScale,
               steps: img.meta.steps,
-              size: img.meta.Size,
               resources: img.meta.resources,
             }
           : null,
       }));
 
-      const withPrompt = images.filter((i) => i.meta?.prompt).length;
-
       return {
+        domain: result.usedDomain,
         images,
         nextCursor: result.nextCursor,
-        meta: {
-          returned: images.length,
-          withPrompt,
-          withoutPrompt: images.length - withPrompt,
-        },
       };
     } catch (e: any) {
       return {

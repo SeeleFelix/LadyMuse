@@ -21,11 +21,19 @@ async function fetchWithRetry(url: string, retries = 3): Promise<any> {
   }
 }
 
-async function fetchWithFallback(path: string): Promise<any> {
+interface FallbackResult<T> {
+  data: T;
+  usedDomain: string;
+}
+
+async function fetchWithFallback<T = any>(
+  path: string,
+): Promise<FallbackResult<T>> {
   let lastError: any;
   for (const base of BASE_URLS) {
     try {
-      return await fetchWithRetry(`${base}${path}`);
+      const data = await fetchWithRetry(`${base}${path}`);
+      return { data, usedDomain: new URL(base).hostname };
     } catch (e: any) {
       lastError = e;
       continue;
@@ -71,6 +79,7 @@ export interface CivitaiModel {
 interface PageResult<T> {
   items: T[];
   nextCursor?: string;
+  usedDomain: string;
 }
 
 // --- Images API ---
@@ -115,10 +124,13 @@ export async function searchImages(
   if (params.limit != null) p.set("limit", String(params.limit));
   if (params.cursor) p.set("cursor", params.cursor);
 
-  const data = await fetchWithFallback(`/api/v1/images?${p.toString()}`);
+  const { data, usedDomain } = await fetchWithFallback(
+    `/api/v1/images?${p.toString()}`,
+  );
   return {
     items: data.items || [],
     nextCursor: data.metadata?.nextCursor,
+    usedDomain,
   };
 }
 
@@ -153,7 +165,9 @@ export async function searchModels(
   if (params.period) p.set("period", params.period);
   if (params.limit != null) p.set("limit", String(params.limit));
 
-  const data = await fetchWithFallback(`/api/v1/models?${p.toString()}`);
+  const { data, usedDomain } = await fetchWithFallback(
+    `/api/v1/models?${p.toString()}`,
+  );
   const items = (data.items || []).map((m: any) => ({
     id: m.id,
     name: m.name,
@@ -166,5 +180,6 @@ export async function searchModels(
   return {
     items,
     nextCursor: data.metadata?.nextCursor,
+    usedDomain,
   };
 }

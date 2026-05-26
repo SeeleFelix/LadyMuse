@@ -60,6 +60,8 @@
     for (const v of messageCosts.values()) total += v.cost;
     return total;
   });
+  let currentContextTokens = $state(0);
+  let expandedSteps = $state<Set<number>>(new Set());
 
   let selectedProvider = $state("openrouter");
   let selectedModel = $state("");
@@ -211,6 +213,7 @@
     customInputIdx = -1;
     customInputText = "";
     isLoading = false;
+    currentContextTokens = 0;
   }
 
   async function switchSession(id: number) {
@@ -253,6 +256,12 @@
           }
         });
         messageCosts = new Map(messageCosts);
+        currentContextTokens = 0;
+        const costs = [...messageCosts.values()];
+        if (costs.length > 0) {
+          const last = costs[costs.length - 1];
+          currentContextTokens = last.contextTokens || last.inputTokens || 0;
+        }
         currentSessionId = id;
         showSidebar = false;
       }
@@ -371,6 +380,7 @@
     optionsDisabled = true;
     customInputIdx = -1;
     customInputText = "";
+    currentContextTokens = 0;
 
     const newMsgStart = messages.length - 1;
     messages = [...messages, { role: "assistant", content: "" }];
@@ -508,8 +518,38 @@
                   outputTokens: event.outputTokens,
                   cacheHitTokens: event.cacheHitTokens || 0,
                   source: event.source,
+                  ...(event.steps && event.steps.length > 0
+                    ? {
+                        contextTokens:
+                          event.steps[event.steps.length - 1].inputTokens +
+                          event.steps[event.steps.length - 1].outputTokens,
+                        steps: event.steps,
+                      }
+                    : {}),
                 });
                 messageCosts = new Map(messageCosts);
+                currentContextTokens = event.inputTokens;
+              } else if (event.type === "step-usage") {
+                const existing = messageCosts.get(costIdx) || {
+                  cost: 0,
+                  currency: event.currency,
+                  inputTokens: 0,
+                  outputTokens: 0,
+                  cacheHitTokens: 0,
+                  source: "calculated",
+                };
+                messageCosts.set(costIdx, {
+                  cost: existing.cost + event.cost,
+                  currency: event.currency,
+                  inputTokens: existing.inputTokens + event.inputTokens,
+                  outputTokens: existing.outputTokens + event.outputTokens,
+                  cacheHitTokens:
+                    existing.cacheHitTokens + event.cacheReadTokens,
+                  source: "calculated",
+                  contextTokens: event.inputTokens + event.outputTokens,
+                });
+                messageCosts = new Map(messageCosts);
+                currentContextTokens = event.inputTokens + event.outputTokens;
               } else if (event.type === "timing") {
                 messageTimings.set(costIdx, {
                   promptBuildMs: event.promptBuildMs,
@@ -1176,7 +1216,7 @@
                 {@const cost = messageCosts.get(i)!}
                 {@const timing = messageTimings.get(i)}
                 <div
-                  class="mt-1 flex items-center gap-2 text-[10px] text-zinc-600 px-1"
+                  class="mt-1 flex items-center gap-2 text-[10px] text-zinc-600 px-1 flex-wrap"
                 >
                   <span
                     >{cost.inputTokens > 1000
@@ -1196,6 +1236,15 @@
                         ? (cost.cacheHitTokens / 1000).toFixed(1) + "K"
                         : cost.cacheHitTokens}
                       cached</span
+                    >
+                  {/if}
+                  {#if cost.contextTokens}
+                    <span class="text-zinc-700">|</span>
+                    <span class="text-blue-700"
+                      >{cost.contextTokens > 1000
+                        ? (cost.contextTokens / 1000).toFixed(1) + "K"
+                        : cost.contextTokens}
+                      上下文</span
                     >
                   {/if}
                   <span class="text-zinc-700">|</span>
@@ -1239,6 +1288,59 @@
                     {/if}
                   {/if}
                 </div>
+                {#if cost.steps && cost.steps.length > 1}
+                  <div class="px-1">
+                    <button
+                      onclick={() => {
+                        const next = new Set(expandedSteps);
+                        next.has(i) ? next.delete(i) : next.add(i);
+                        expandedSteps = next;
+                      }}
+                      class="text-[10px] text-zinc-600 hover:text-zinc-400"
+                    >
+                      {expandedSteps.has(i) ? "▼" : "▶"}
+                      {cost.steps.length} steps
+                    </button>
+                    {#if expandedSteps.has(i)}
+                      <div class="mt-0.5 space-y-0.5">
+                        {#each cost.steps as step, si}
+                          <div class="text-[10px] text-zinc-600 tabular-nums">
+                            Step {si + 1}:
+                            {step.inputTokens > 1000
+                              ? (step.inputTokens / 1000).toFixed(1) + "K"
+                              : step.inputTokens}
+                            in |
+                            {step.outputTokens > 1000
+                              ? (step.outputTokens / 1000).toFixed(1) + "K"
+                              : step.outputTokens}
+                            out
+                            {#if step.cacheReadTokens > 0}
+                              |
+                              <span class="text-emerald-700"
+                                >{step.cacheReadTokens > 1000
+                                  ? (step.cacheReadTokens / 1000).toFixed(1) +
+                                    "K"
+                                  : step.cacheReadTokens}
+                                cached</span
+                              >
+                            {/if}
+                            |
+                            {step.inputTokens + step.outputTokens > 1000
+                              ? (
+                                  (step.inputTokens + step.outputTokens) /
+                                  1000
+                                ).toFixed(1) + "K"
+                              : step.inputTokens + step.outputTokens}
+                            上下文 |
+                            {cost.currency === "CNY"
+                              ? "¥"
+                              : "$"}{step.cost.toFixed(4)}
+                          </div>
+                        {/each}
+                      </div>
+                    {/if}
+                  </div>
+                {/if}
               {/if}
             </div>
           </div>
@@ -1281,6 +1383,14 @@
           >
         {/if}
       </div>
+      {#if currentContextTokens > 0}
+        <div class="mt-2 text-[10px] text-zinc-600 tabular-nums">
+          上下文 {currentContextTokens > 1000
+            ? (currentContextTokens / 1000).toFixed(1) + "K"
+            : currentContextTokens}
+          tokens
+        </div>
+      {/if}
     </div>
   </div>
 </div>
