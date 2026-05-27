@@ -15,6 +15,59 @@ interface Message {
   image?: string;
 }
 
+interface StepLike {
+  content: Array<{
+    type: string;
+    text?: string;
+    toolCallId?: string;
+    toolName?: string;
+    input?: unknown;
+  }>;
+  toolResults: Array<{
+    type: string;
+    toolCallId: string;
+    toolName: string;
+    output: unknown;
+  }>;
+}
+
+export function stepsToMessages(steps: StepLike[]): Array<Record<string, any>> {
+  const messages: Array<Record<string, any>> = [];
+
+  for (const step of steps) {
+    const assistantParts = step.content.filter(
+      (part) =>
+        part.type === "text" ||
+        part.type === "tool-call" ||
+        part.type === "reasoning",
+    );
+
+    if (assistantParts.length > 0) {
+      messages.push({ role: "assistant", content: assistantParts });
+    }
+
+    if (step.toolResults && step.toolResults.length > 0) {
+      messages.push({
+        role: "tool",
+        content: step.toolResults.map((r) => ({
+          type: "tool-result",
+          toolCallId: r.toolCallId,
+          toolName: r.toolName,
+          output: {
+            type: "text",
+            value:
+              typeof r.output === "string"
+                ? r.output
+                : JSON.stringify(r.output),
+          },
+        })),
+      });
+    }
+  }
+
+  return messages;
+}
+
 export async function* chatStream(
   messages: Message[],
   modelId?: string,
