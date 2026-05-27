@@ -677,12 +677,23 @@
         continue;
       }
       const msg = messages[i];
-      if (msg.content && msg.content.trim()) {
+      const hasContent = msg.content && msg.content.trim();
+      const isToolStep =
+        msg.role === "assistant" &&
+        !hasContent &&
+        i + 1 < messages.length &&
+        messages[i + 1].role === "tool";
+      if (hasContent || isToolStep) {
         let usageJson: string | undefined;
         if (msg.role === "assistant" && messageCosts.has(i)) {
           usageJson = JSON.stringify(messageCosts.get(i));
         }
-        await appendToSession(msg.role, msg.content, msg.toolDetail, usageJson);
+        await appendToSession(
+          msg.role,
+          msg.content || "",
+          msg.toolDetail,
+          usageJson,
+        );
       }
     }
     loadSessions();
