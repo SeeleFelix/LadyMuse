@@ -166,173 +166,235 @@ export async function* chatStream(
   const systemPrompt = await buildSystemPrompt(lastUserMsg);
   const promptBuildMs = Date.now() - startTime;
   const streamStart = Date.now();
+  const resolvedProviderId = providerId || "openrouter";
 
-  const result = streamText({
-    model,
-    system: systemPrompt,
-    messages: formattedMessages,
-    tools: await getEnabledTools(),
-    stopWhen: stepCountIs(10),
-    ...(deepseekProvider && {
-      providerOptions: {
-        deepseek: {
-          thinking: { type: "enabled" },
+  const maxStepsPerRound = parseInt(
+    (await getConfig("max_steps_per_round")) || "20",
+    10,
+  );
+  const maxContinuationRounds = parseInt(
+    (await getConfig("max_continuation_rounds")) || "3",
+    10,
+  );
+  const maxContinuationTokens = parseInt(
+    (await getConfig("max_continuation_input_tokens")) || "200000",
+    10,
+  );
+
+  const tools = await getEnabledTools();
+  let allMessages = [...formattedMessages];
+  let totalInputTokens = 0;
+
+  for (
+    let continuationRound = 0;
+    continuationRound <= maxContinuationRounds;
+    continuationRound++
+  ) {
+    const result = streamText({
+      model,
+      system: systemPrompt,
+      messages: allMessages,
+      tools,
+      stopWhen: stepCountIs(maxStepsPerRound),
+      ...(deepseekProvider && {
+        providerOptions: {
+          deepseek: {
+            thinking: { type: "enabled" },
+          },
         },
-      },
-    }),
-  });
+      }),
+    });
 
-  let gotText = false;
-  let firstTokenMs = 0;
-  let firstReasoningMs = 0;
-  let reasoningEndMs = 0;
-  const toolStartTimes = new Map<string, number>();
-  const toolTimings: { name: string; durationMs: number }[] = [];
-  let stepNumber = 0;
-  const collectedSteps: Array<{
-    inputTokens: number;
-    outputTokens: number;
-    cacheReadTokens: number;
-    cost: number;
-  }> = [];
+    let gotText = false;
+    let firstTokenMs = 0;
+    let firstReasoningMs = 0;
+    let reasoningEndMs = 0;
+    const toolStartTimes = new Map<string, number>();
+    const toolTimings: { name: string; durationMs: number }[] = [];
+    let stepNumber = 0;
+    const collectedSteps: Array<{
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadTokens: number;
+      cost: number;
+    }> = [];
 
-  try {
-    for await (const event of result.fullStream) {
-      if (signal?.aborted) break;
-      if (event.type === "reasoning-delta") {
-        if (!firstReasoningMs) {
-          firstReasoningMs = Date.now() - streamStart;
-        }
-        yield JSON.stringify({
-          type: "reasoning",
-          content: event.text,
-        }) + "\n";
-      } else if (event.type === "text-delta") {
-        if (!gotText) {
-          firstTokenMs = Date.now() - streamStart;
-          if (!reasoningEndMs) reasoningEndMs = firstTokenMs;
-        }
-        gotText = true;
-        yield JSON.stringify({ type: "text", content: event.text }) + "\n";
-      } else if (event.type === "tool-call") {
-        toolStartTimes.set(event.toolName, Date.now());
-        yield JSON.stringify({
-          type: "tool-call",
-          name: event.toolName,
-          toolCallId: event.toolCallId,
-          input: event.input,
-        }) + "\n";
-      } else if (event.type === "tool-result") {
-        const toolStart = toolStartTimes.get(event.toolName);
-        if (toolStart) {
-          toolTimings.push({
+    try {
+      for await (const event of result.fullStream) {
+        if (signal?.aborted) break;
+        if (event.type === "reasoning-delta") {
+          if (!firstReasoningMs) {
+            firstReasoningMs = Date.now() - streamStart;
+          }
+          yield JSON.stringify({
+            type: "reasoning",
+            content: event.text,
+          }) + "\n";
+        } else if (event.type === "text-delta") {
+          if (!gotText) {
+            firstTokenMs = Date.now() - streamStart;
+            if (!reasoningEndMs) reasoningEndMs = firstTokenMs;
+          }
+          gotText = true;
+          yield JSON.stringify({ type: "text", content: event.text }) + "\n";
+        } else if (event.type === "tool-call") {
+          toolStartTimes.set(event.toolName, Date.now());
+          yield JSON.stringify({
+            type: "tool-call",
             name: event.toolName,
-            durationMs: Date.now() - toolStart,
-          });
-          toolStartTimes.delete(event.toolName);
-        }
-        const output =
-          typeof event.output === "string"
-            ? event.output
-            : JSON.stringify(event.output);
-        yield JSON.stringify({
-          type: "tool-result",
-          name: event.toolName,
-          toolCallId: (event as any).toolCallId,
-          output,
-        }) + "\n";
-      } else if (event.type === "finish-step") {
-        const stepUsage = event.usage;
-        const cacheRead =
-          (stepUsage.inputTokenDetails as any)?.cacheReadTokens ?? 0;
-        const stepCostResult = await calculateCost(
-          resolvedProvider,
-          resolvedModel,
-          {
+            toolCallId: event.toolCallId,
+            input: event.input,
+          }) + "\n";
+        } else if (event.type === "tool-result") {
+          const toolStart = toolStartTimes.get(event.toolName);
+          if (toolStart) {
+            toolTimings.push({
+              name: event.toolName,
+              durationMs: Date.now() - toolStart,
+            });
+            toolStartTimes.delete(event.toolName);
+          }
+          const output =
+            typeof event.output === "string"
+              ? event.output
+              : JSON.stringify(event.output);
+          yield JSON.stringify({
+            type: "tool-result",
+            name: event.toolName,
+            toolCallId: (event as any).toolCallId,
+            output,
+          }) + "\n";
+        } else if (event.type === "finish-step") {
+          const stepUsage = event.usage;
+          const cacheRead =
+            (stepUsage.inputTokenDetails as any)?.cacheReadTokens ?? 0;
+          const stepCostResult = await calculateCost(
+            resolvedProvider,
+            resolvedModel,
+            {
+              inputTokens: stepUsage.inputTokens ?? 0,
+              outputTokens: stepUsage.outputTokens ?? 0,
+              cacheReadTokens: cacheRead,
+            },
+          );
+          stepNumber++;
+          const stepEntry = {
             inputTokens: stepUsage.inputTokens ?? 0,
             outputTokens: stepUsage.outputTokens ?? 0,
             cacheReadTokens: cacheRead,
-          },
-        );
-        stepNumber++;
-        const stepEntry = {
-          inputTokens: stepUsage.inputTokens ?? 0,
-          outputTokens: stepUsage.outputTokens ?? 0,
-          cacheReadTokens: cacheRead,
-          cost: stepCostResult.cost,
-        };
-        collectedSteps.push(stepEntry);
-        yield JSON.stringify({
-          type: "step-usage",
-          stepNumber,
-          ...stepEntry,
-          currency: stepCostResult.currency,
-        }) + "\n";
+            cost: stepCostResult.cost,
+          };
+          collectedSteps.push(stepEntry);
+          totalInputTokens += stepUsage.inputTokens ?? 0;
+          yield JSON.stringify({
+            type: "step-usage",
+            stepNumber,
+            ...stepEntry,
+            currency: stepCostResult.currency,
+          }) + "\n";
+        }
       }
+
+      if (!gotText) {
+        const finalText = await result.text;
+        if (finalText) {
+          gotText = true;
+          yield JSON.stringify({ type: "text", content: finalText }) + "\n";
+        }
+      }
+    } catch (e: any) {
+      yield JSON.stringify({ type: "error", content: e.message }) + "\n";
+      return;
     }
 
-    // Fallback: if fullStream didn't emit text-delta, get from result.text promise
-    if (!gotText) {
-      const finalText = await result.text;
-      if (finalText) {
-        yield JSON.stringify({ type: "text", content: finalText }) + "\n";
-      }
+    if (signal?.aborted) return;
+
+    if (gotText) {
+      const totalStreamMs = Date.now() - streamStart;
+      const usage = await result.totalUsage;
+      const durationMs = Date.now() - startTime;
+      const costResult = await calculateCost(
+        resolvedProviderId,
+        resolvedModel,
+        {
+          inputTokens: usage.inputTokens ?? 0,
+          outputTokens: usage.outputTokens ?? 0,
+          cacheReadTokens:
+            (usage.inputTokenDetails as any)?.cacheReadTokens ?? 0,
+        },
+      );
+
+      yield JSON.stringify({
+        type: "usage",
+        inputTokens: usage.inputTokens ?? 0,
+        outputTokens: usage.outputTokens ?? 0,
+        cacheHitTokens: costResult.breakdown.cacheHitTokens,
+        cost: costResult.cost,
+        currency: costResult.currency,
+        breakdown: costResult.breakdown,
+        source: costResult.source,
+        steps: collectedSteps,
+        durationMs,
+      }) + "\n";
+
+      yield JSON.stringify({
+        type: "timing",
+        promptBuildMs,
+        firstTokenMs,
+        firstReasoningMs,
+        reasoningDurationMs:
+          reasoningEndMs && firstReasoningMs
+            ? reasoningEndMs - firstReasoningMs
+            : 0,
+        totalStreamMs,
+        toolTimings,
+      }) + "\n";
+
+      await logUsage({
+        sessionId,
+        provider: resolvedProviderId,
+        modelId: resolvedModel,
+        inputTokens: usage.inputTokens ?? 0,
+        outputTokens: usage.outputTokens ?? 0,
+        cacheHitTokens: costResult.breakdown.cacheHitTokens,
+        cost: costResult.cost,
+        currency: costResult.currency,
+        durationMs,
+        metadata: { costSource: costResult.source },
+      });
+
+      return;
     }
 
-    const totalStreamMs = Date.now() - streamStart;
+    // No text output — auto-continue
+    if (totalInputTokens >= maxContinuationTokens) {
+      yield JSON.stringify({
+        type: "text",
+        content: "[达到 token 上限，请发送消息继续]",
+      }) + "\n";
+      return;
+    }
 
-    // Capture usage and calculate cost
-    const usage = await result.totalUsage;
-    const durationMs = Date.now() - startTime;
-
-    const resolvedProviderId = providerId || "openrouter";
-    const costResult = await calculateCost(resolvedProviderId, resolvedModel, {
-      inputTokens: usage.inputTokens ?? 0,
-      outputTokens: usage.outputTokens ?? 0,
-      cacheReadTokens: (usage.inputTokenDetails as any)?.cacheReadTokens ?? 0,
-    });
-
-    yield JSON.stringify({
-      type: "usage",
-      inputTokens: usage.inputTokens ?? 0,
-      outputTokens: usage.outputTokens ?? 0,
-      cacheHitTokens: costResult.breakdown.cacheHitTokens,
-      cost: costResult.cost,
-      currency: costResult.currency,
-      breakdown: costResult.breakdown,
-      source: costResult.source,
-      steps: collectedSteps,
-      durationMs,
-    }) + "\n";
+    const completedSteps = await result.steps;
+    const roundMessages = stepsToMessages(
+      completedSteps.map((s) => ({
+        content: s.content as any[],
+        toolResults: (s.toolResults || []) as any[],
+      })),
+    );
+    allMessages = [...allMessages, ...roundMessages];
 
     yield JSON.stringify({
-      type: "timing",
-      promptBuildMs,
-      firstTokenMs,
-      firstReasoningMs,
-      reasoningDurationMs:
-        reasoningEndMs && firstReasoningMs
-          ? reasoningEndMs - firstReasoningMs
-          : 0,
-      totalStreamMs,
-      toolTimings,
+      type: "continuation",
+      round: continuationRound + 1,
     }) + "\n";
-
-    await logUsage({
-      sessionId,
-      provider: resolvedProviderId,
-      modelId: resolvedModel,
-      inputTokens: usage.inputTokens ?? 0,
-      outputTokens: usage.outputTokens ?? 0,
-      cacheHitTokens: costResult.breakdown.cacheHitTokens,
-      cost: costResult.cost,
-      currency: costResult.currency,
-      durationMs,
-      metadata: { costSource: costResult.source },
-    });
-  } catch (e: any) {
-    yield JSON.stringify({ type: "error", content: e.message }) + "\n";
   }
+
+  // Exhausted all continuation rounds
+  yield JSON.stringify({
+    type: "text",
+    content: "[达到续跑上限，请发送消息继续]",
+  }) + "\n";
 }
 
 export { DEFAULT_MODEL };
