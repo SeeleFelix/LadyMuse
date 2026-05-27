@@ -463,10 +463,15 @@
                     role: "tool",
                     content: `🔍 ${toolName}...`,
                     toolDetail: JSON.stringify(
-                      { name: event.name, input: event.input },
+                      {
+                        name: event.name,
+                        input: event.input,
+                        toolCallId: event.toolCallId,
+                      },
                       null,
                       2,
                     ),
+                    toolCallId: event.toolCallId,
                   };
                   messages = [...messages, toolMsg];
                   pendingToolMap.set(event.toolCallId, messages.length - 1);
@@ -570,7 +575,7 @@
     } catch (e: any) {
       if (e.name === "AbortError") {
         for (const m of messages) {
-          if (m.role === "tool") m.toolCallId = undefined;
+          if (m.role === "tool" && m.options) m.toolCallId = undefined;
         }
         optionsDisabled = true;
       } else {
