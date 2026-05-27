@@ -532,7 +532,11 @@
                     : {}),
                 });
                 messageCosts = new Map(messageCosts);
-                currentContextTokens = event.inputTokens;
+                currentContextTokens =
+                  event.steps && event.steps.length > 0
+                    ? event.steps[event.steps.length - 1].inputTokens +
+                      event.steps[event.steps.length - 1].outputTokens
+                    : event.inputTokens + event.outputTokens;
               } else if (event.type === "step-usage") {
                 const existing = messageCosts.get(costIdx) || {
                   cost: 0,
