@@ -479,7 +479,7 @@
     let pendingToolMap = new Map<string, number>();
     let costIdx = textTargetIdx;
 
-    const apiMessages = buildApiMessages(messages);
+    const apiMessages = buildApiMessages(messages.slice(0, -1));
 
     const controller = new AbortController();
     abortController = controller;
@@ -491,7 +491,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: apiMessages.slice(0, -1),
+          messages: apiMessages,
           model: selectedModel,
           provider: selectedProvider,
           sessionId: currentSessionId,
