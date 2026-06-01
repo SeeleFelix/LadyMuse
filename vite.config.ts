@@ -1,12 +1,15 @@
-import { sveltekit } from '@sveltejs/kit/vite';
-import tailwindcss from '@tailwindcss/vite';
-import { defineConfig } from 'vite';
+import { sveltekit } from "@sveltejs/kit/vite";
+import tailwindcss from "@tailwindcss/vite";
+import { defineConfig } from "vite";
 
 export default defineConfig({
-	plugins: [tailwindcss(), sveltekit()],
-	server: {
-		watch: {
-			ignored: ['**/ladymuse.db*']
-		}
-	}
+  plugins: [tailwindcss(), sveltekit()],
+  ssr: {
+    external: ["better-sqlite3", "sqlite-vec"],
+  },
+  server: {
+    watch: {
+      ignored: ["**/ladymuse.db*", "**/.db-backups/**"],
+    },
+  },
 });

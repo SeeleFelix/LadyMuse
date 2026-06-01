@@ -75,7 +75,6 @@
   let optionsDisabled = $state(false);
   let customInputIdx = $state(-1);
   let customInputText = $state("");
-  let savedMessageIndices = new Set<number>();
 
   let agentModules = $state<
     { file: string; enabled: boolean; exclusive_group?: string }[]
@@ -366,9 +365,6 @@
       optionsDisabled = false;
       messages = [...messages];
     }
-
-    await appendToSession(msg.role, msg.content, msg.toolDetail);
-    savedMessageIndices.add(idx);
   }
 
   async function sendMessage() {
@@ -587,10 +583,6 @@
     }
 
     for (let i = newMsgStart; i < messages.length; i++) {
-      if (savedMessageIndices.has(i)) {
-        savedMessageIndices.delete(i);
-        continue;
-      }
       const msg = messages[i];
       const hasContent = msg.content && msg.content.trim();
       const isToolStep =

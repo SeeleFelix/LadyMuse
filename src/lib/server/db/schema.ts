@@ -1,4 +1,7 @@
 import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+
+const now = sql`(datetime('now'))`;
 
 // Art Knowledge Base
 export const artCategories = sqliteTable("art_categories", {
@@ -92,8 +95,8 @@ export const promptTemplates = sqliteTable("prompt_templates", {
   category: text("category"),
   tags: text("tags"),
   isBuiltin: integer("is_builtin", { mode: "boolean" }).default(false),
-  createdAt: text("created_at").default("(datetime('now'))"),
-  updatedAt: text("updated_at").default("(datetime('now'))"),
+  createdAt: text("created_at").default(now),
+  updatedAt: text("updated_at").default(now),
 });
 
 export const prompts = sqliteTable("prompts", {
@@ -113,8 +116,8 @@ export const prompts = sqliteTable("prompts", {
   cfgScale: real("cfg_scale"),
   width: integer("width"),
   height: integer("height"),
-  createdAt: text("created_at").default("(datetime('now'))"),
-  updatedAt: text("updated_at").default("(datetime('now'))"),
+  createdAt: text("created_at").default(now),
+  updatedAt: text("updated_at").default(now),
 });
 
 export const promptVersions = sqliteTable("prompt_versions", {
@@ -126,7 +129,7 @@ export const promptVersions = sqliteTable("prompt_versions", {
   positive: text("positive").notNull(),
   negative: text("negative"),
   diffSummary: text("diff_summary"),
-  createdAt: text("created_at").default("(datetime('now'))"),
+  createdAt: text("created_at").default(now),
 });
 
 export const tags = sqliteTable("tags", {
@@ -160,7 +163,7 @@ export const generations = sqliteTable("generations", {
   cfgScale: real("cfg_scale"),
   modelName: text("model_name"),
   durationMs: integer("duration_ms"),
-  createdAt: text("created_at").default("(datetime('now'))"),
+  createdAt: text("created_at").default(now),
 });
 
 export const generationRatings = sqliteTable("generation_ratings", {
@@ -172,7 +175,7 @@ export const generationRatings = sqliteTable("generation_ratings", {
   isFavorite: integer("is_favorite", { mode: "boolean" }).default(false),
   notes: text("notes"),
   effectiveKeywords: text("effective_keywords"),
-  createdAt: text("created_at").default("(datetime('now'))"),
+  createdAt: text("created_at").default(now),
 });
 
 export const keywordStats = sqliteTable("keyword_stats", {
@@ -188,7 +191,7 @@ export const keywordStats = sqliteTable("keyword_stats", {
 export const userConfig = sqliteTable("user_config", {
   key: text("key").notNull().unique(),
   value: text("value").notNull(),
-  updatedAt: text("updated_at").default("(datetime('now'))"),
+  updatedAt: text("updated_at").default(now),
 });
 
 // Cached Models
@@ -204,15 +207,15 @@ export const cachedModels = sqliteTable("cached_models", {
   baseModel: text("base_model"),
   tags: text("tags"),
   downloadCount: integer("download_count"),
-  updatedAt: text("updated_at").default("(datetime('now'))"),
+  updatedAt: text("updated_at").default(now),
 });
 
 // Sessions
 export const sessions = sqliteTable("sessions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   title: text("title").default("新对话"),
-  createdAt: text("created_at").default("(datetime('now'))"),
-  updatedAt: text("updated_at").default("(datetime('now'))"),
+  createdAt: text("created_at").default(now),
+  updatedAt: text("updated_at").default(now),
 });
 
 export const sessionMessages = sqliteTable("session_messages", {
@@ -224,7 +227,7 @@ export const sessionMessages = sqliteTable("session_messages", {
   content: text("content").notNull(),
   toolDetail: text("tool_detail"),
   usageJson: text("usage_json"),
-  createdAt: text("created_at").default("(datetime('now'))"),
+  createdAt: text("created_at").default(now),
 });
 
 // Inspiration
@@ -235,7 +238,7 @@ export const inspirationSeeds = sqliteTable("inspiration_seeds", {
   moodTags: text("mood_tags"),
   difficulty: text("difficulty").default("any"),
   isUsed: integer("is_used", { mode: "boolean" }).default(false),
-  createdAt: text("created_at").default("(datetime('now'))"),
+  createdAt: text("created_at").default(now),
 });
 
 // Sync State
@@ -243,7 +246,7 @@ export const syncState = sqliteTable("sync_state", {
   key: text("key").notNull().unique(),
   lastCursor: text("last_cursor"),
   syncedCount: integer("synced_count").default(0),
-  updatedAt: text("updated_at").default("(datetime('now'))"),
+  updatedAt: text("updated_at").default(now),
 });
 
 // Image Management (Lightroom-style)
@@ -252,7 +255,7 @@ export const stacks = sqliteTable("stacks", {
   name: text("name"),
   coverImagePath: text("cover_image_path"),
   collapsed: integer("collapsed", { mode: "boolean" }).default(true),
-  createdAt: text("created_at").default("(datetime('now'))"),
+  createdAt: text("created_at").default(now),
 });
 
 export const imageAttributes = sqliteTable("image_attributes", {
@@ -263,8 +266,8 @@ export const imageAttributes = sqliteTable("image_attributes", {
   notes: text("notes"),
   stackId: integer("stack_id").references(() => stacks.id),
   metadataJson: text("metadata_json"),
-  createdAt: text("created_at").default("(datetime('now'))"),
-  updatedAt: text("updated_at").default("(datetime('now'))"),
+  createdAt: text("created_at").default(now),
+  updatedAt: text("updated_at").default(now),
 });
 
 export const imageTags = sqliteTable("image_tags", {
@@ -281,8 +284,8 @@ export const collections = sqliteTable("collections", {
   coverImagePath: text("cover_image_path"),
   isSmart: integer("is_smart", { mode: "boolean" }).default(false),
   smartCriteria: text("smart_criteria"),
-  createdAt: text("created_at").default("(datetime('now'))"),
-  updatedAt: text("updated_at").default("(datetime('now'))"),
+  createdAt: text("created_at").default(now),
+  updatedAt: text("updated_at").default(now),
 });
 
 export const collectionImages = sqliteTable("collection_images", {
@@ -291,7 +294,7 @@ export const collectionImages = sqliteTable("collection_images", {
     .references(() => collections.id, { onDelete: "cascade" }),
   relativePath: text("relative_path").notNull(),
   sortOrder: integer("sort_order").default(0),
-  addedAt: text("added_at").default("(datetime('now'))"),
+  addedAt: text("added_at").default(now),
 });
 
 // Danbooru Cache
@@ -356,7 +359,7 @@ export const usageLogs = sqliteTable("usage_logs", {
   currency: text("currency").notNull().default("CNY"),
   durationMs: integer("duration_ms"),
   metadata: text("metadata"),
-  createdAt: text("created_at").default("(datetime('now'))"),
+  createdAt: text("created_at").default(now),
 });
 
 // 知识库 — 概念
@@ -376,8 +379,8 @@ export const artConcepts = sqliteTable("art_concepts", {
   sourceId: text("source_id"),
   qualityVerified: integer("quality_verified").default(0),
   embedding: text("embedding"),
-  createdAt: text("created_at").default("(datetime('now'))"),
-  updatedAt: text("updated_at").default("(datetime('now'))"),
+  createdAt: text("created_at").default(now),
+  updatedAt: text("updated_at").default(now),
 });
 
 // 知识库 — 模式
@@ -392,8 +395,8 @@ export const artPatterns = sqliteTable("art_patterns", {
   involvesConcepts: text("involves_concepts"),
   embedding: text("embedding"),
   qualityVerified: integer("quality_verified").default(0),
-  createdAt: text("created_at").default("(datetime('now'))"),
-  updatedAt: text("updated_at").default("(datetime('now'))"),
+  createdAt: text("created_at").default(now),
+  updatedAt: text("updated_at").default(now),
 });
 
 // 知识库 — 参考
@@ -411,6 +414,6 @@ export const artReferences = sqliteTable("art_references", {
   verified: integer("verified").default(0),
   source: text("source").default("manual"),
   embedding: text("embedding"),
-  createdAt: text("created_at").default("(datetime('now'))"),
-  updatedAt: text("updated_at").default("(datetime('now'))"),
+  createdAt: text("created_at").default(now),
+  updatedAt: text("updated_at").default(now),
 });
