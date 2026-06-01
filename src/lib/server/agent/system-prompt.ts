@@ -132,9 +132,10 @@ export function assemblePrompt(
 export async function buildSystemPrompt(userMessage?: string): Promise<string> {
   const targetModelId = (await getConfig("target_image_model")) || "zit";
   const outputLang = (await getConfig("output_language")) || "zh";
-  const promptStyle = (await getConfig("prompt_style")) || "hybrid";
 
   const profile = getModelProfile(targetModelId) || getDefaultProfile();
+  // Model profile defines the canonical prompt style; config override is secondary.
+  const promptStyle = (await getConfig("prompt_style")) || profile.promptStyle;
 
   const modules = await loadPromptModules(targetModelId);
   const directory = await buildKnowledgeDirectory();
