@@ -177,8 +177,8 @@ const profiles: ModelProfile[] = [
       "逗号后必须有空格，缺失会显著影响生成结果。" +
       "采样器选择：er_sde（默认，锐利线条平色）、euler_a（柔和细线偏 2.5D，CFG 可略高）、dpmpp_2m_sde_gpu（更多样创意，偶尔狂野）。" +
       "追求写实/油画质感可用 beta57 scheduler（RES4LYF custom node pack）。" +
-      "30-50 步，CFG 4-5。" +
-      "推荐正向前缀：masterpiece, best quality, score_7, safe。推荐负面：worst quality, low quality, score_1, score_2, score_3, artist name。",
+      "25-35 步，CFG 4-5。" +
+      "质量标签、安全标签、负面提示词不要使用固定模板——根据画面风格和内容从系统提示词的场景参考表中选择最合适的组合。",
   },
 ];
 
