@@ -1,5 +1,5 @@
 import { watch, type FSWatcher } from "chokidar";
-import { statSync, existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join, extname, relative } from "node:path";
 import { db } from "./db";
 import { imageAttributes } from "./db/schema";
