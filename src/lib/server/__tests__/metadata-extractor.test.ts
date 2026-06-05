@@ -17,7 +17,7 @@ afterAll(() => {
 });
 
 describe("extractImageMetadata", () => {
-  it("1. Basic file properties - PNG with no metadata", () => {
+  it("Basic file properties - PNG with no metadata", () => {
     const path = join(testDir, "basic.png");
     createTestPng(path, { width: 1024, height: 1536, alpha: false });
 
@@ -33,7 +33,7 @@ describe("extractImageMetadata", () => {
     expect(result.rawChunks).toEqual([]);
   });
 
-  it("2. Aspect ratio classification - landscape (1920x1080)", () => {
+  it("Aspect ratio classification - landscape (1920x1080)", () => {
     const path = join(testDir, "landscape.png");
     createTestPng(path, { width: 1920, height: 1080 });
 
@@ -43,7 +43,7 @@ describe("extractImageMetadata", () => {
     expect(result.height).toBe(1080);
   });
 
-  it("2. Aspect ratio classification - square (512x512)", () => {
+  it("Aspect ratio classification - square (512x512)", () => {
     const path = join(testDir, "square.png");
     createTestPng(path, { width: 512, height: 512 });
 
@@ -53,7 +53,7 @@ describe("extractImageMetadata", () => {
     expect(result.height).toBe(512);
   });
 
-  it("2. Aspect ratio classification - portrait (100x200)", () => {
+  it("Aspect ratio classification - portrait (100x200)", () => {
     const path = join(testDir, "portrait.png");
     createTestPng(path, { width: 100, height: 200 });
 
@@ -63,7 +63,7 @@ describe("extractImageMetadata", () => {
     expect(result.height).toBe(200);
   });
 
-  it("3. Alpha channel detection - PNG with hasAlpha=true", () => {
+  it("Alpha channel detection - PNG with hasAlpha=true", () => {
     const path = join(testDir, "alpha.png");
     createTestPng(path, { width: 800, height: 600, alpha: true });
 
@@ -73,7 +73,7 @@ describe("extractImageMetadata", () => {
     expect(result.height).toBe(600);
   });
 
-  it("3. Alpha channel detection - PNG without alpha", () => {
+  it("Alpha channel detection - PNG without alpha", () => {
     const path = join(testDir, "no-alpha.png");
     createTestPng(path, { width: 800, height: 600, alpha: false });
 
@@ -81,7 +81,7 @@ describe("extractImageMetadata", () => {
     expect(result.hasAlpha).toBe(false);
   });
 
-  it("4. ComfyUI metadata extraction - full workflow", () => {
+  it("ComfyUI metadata extraction - full workflow", () => {
     const path = join(testDir, "comfyui.png");
     createTestPng(path, {
       width: 1024,
@@ -113,7 +113,7 @@ describe("extractImageMetadata", () => {
     expect(result.seed).toBe("1234567890");
   });
 
-  it("5. Raw text chunks preserved - all chunks appear", () => {
+  it("Raw text chunks preserved - all chunks appear", () => {
     const path = join(testDir, "raw-chunks.png");
     createTestPng(path, {
       width: 512,
@@ -142,7 +142,7 @@ describe("extractImageMetadata", () => {
     });
   });
 
-  it("6. PNG without ComfyUI metadata - empty defaults", () => {
+  it("PNG without ComfyUI metadata - empty defaults", () => {
     const path = join(testDir, "no-metadata.png");
     createTestPng(path, { width: 800, height: 600 });
 
@@ -160,7 +160,7 @@ describe("extractImageMetadata", () => {
     expect(result.rawChunks).toEqual([]);
   });
 
-  it("7. JPG file - basic format detection, no ComfyUI extraction", () => {
+  it("JPG file - basic format detection, no ComfyUI extraction", () => {
     const path = join(testDir, "image.jpg");
     // Minimal JPEG file (1x1 red pixel)
     const jpegData = Buffer.from([
@@ -194,7 +194,7 @@ describe("extractImageMetadata", () => {
     expect(result.extractedSchedulers).toEqual([]);
   });
 
-  it("8. metadataJson field - stores raw prompt JSON", () => {
+  it("metadataJson field - stores raw prompt JSON", () => {
     const path = join(testDir, "metadata-json.png");
     createTestPng(path, {
       width: 512,
@@ -207,7 +207,7 @@ describe("extractImageMetadata", () => {
     expect(result.metadataJson).toBe(SAMPLE_PROMPT_JSON);
   });
 
-  it("8. metadataJson field - null when no ComfyUI metadata", () => {
+  it("metadataJson field - null when no ComfyUI metadata", () => {
     const path = join(testDir, "no-metadata-json.png");
     createTestPng(path, { width: 512, height: 512 });
 
@@ -239,7 +239,6 @@ describe("extractImageMetadata", () => {
     createTestPng(squarePath, { width: 100, height: 105 });
     expect(extractImageMetadata(squarePath).aspectRatio).toBe("square");
 
-    // 95/100 = 0.95 = portrait threshold
     const portraitPath = join(testDir, "near-portrait.png");
     createTestPng(portraitPath, { width: 95, height: 100 });
     expect(extractImageMetadata(portraitPath).aspectRatio).toBe("square");

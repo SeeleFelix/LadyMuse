@@ -28,7 +28,7 @@ type PngTextChunk =
   | { type: "tEXt"; keyword: string; text: string }
   | { type: "iTXt"; keyword: string; text: string };
 
-const PNG_SIG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+export const PNG_SIG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 
 export function readPngDimensions(

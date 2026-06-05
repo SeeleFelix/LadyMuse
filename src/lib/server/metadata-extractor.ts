@@ -6,6 +6,7 @@ import {
   extractPngTextChunks,
   parseComfyUIPngMetadata,
   readPngDimensions,
+  PNG_SIG,
 } from "./png-metadata";
 
 // PNG color type values from IHDR
@@ -108,7 +109,6 @@ export function detectPngAlpha(filePath: string): boolean {
       const n = readSync(fd, buf, 0, 29, null);
       if (n < 29) return false;
 
-      const PNG_SIG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
       if (!buf.subarray(0, 8).equals(PNG_SIG)) return false;
 
       const ihdrLen = buf.readUInt32BE(8);
