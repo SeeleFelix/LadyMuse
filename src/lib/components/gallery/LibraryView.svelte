@@ -24,7 +24,7 @@
   } = $props();
 
   function handleSelect(path: string, e: MouseEvent) {
-    const multi = e.shiftKey || e.ctrlKey;
+    const multi = e.shiftKey || e.ctrlKey || e.metaKey;
     const range = e.shiftKey;
     store.select(path, multi, range);
   }
