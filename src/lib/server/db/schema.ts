@@ -268,6 +268,30 @@ export const imageAttributes = sqliteTable("image_attributes", {
   metadataJson: text("metadata_json"),
   createdAt: text("created_at").default(now),
   updatedAt: text("updated_at").default(now),
+
+  // Extracted index fields (from ComfyUI workflow)
+  extractedModels: text("extracted_models"),
+  extractedLoras: text("extracted_loras"),
+  extractedSamplers: text("extracted_samplers"),
+  extractedSchedulers: text("extracted_schedulers"),
+  positivePrompt: text("positive_prompt"),
+  negativePrompt: text("negative_prompt"),
+  steps: integer("steps").default(0),
+  cfgScale: real("cfg_scale").default(0),
+  seed: text("seed"),
+
+  // Image physical properties
+  width: integer("width"),
+  height: integer("height"),
+  aspectRatio: text("aspect_ratio"),
+  fileSize: integer("file_size"),
+  fileFormat: text("file_format"),
+  colorSpace: text("color_space"),
+  hasAlpha: integer("has_alpha", { mode: "boolean" }).default(false),
+
+  // File tracking (for sync engine)
+  fileModifiedAt: text("file_modified_at"),
+  isMissing: integer("is_missing", { mode: "boolean" }).default(false),
 });
 
 export const imageTags = sqliteTable("image_tags", {
