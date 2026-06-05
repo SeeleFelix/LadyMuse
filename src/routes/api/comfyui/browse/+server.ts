@@ -1,201 +1,395 @@
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
-import { browseImages, getOutputDir } from "$lib/server/comfyui-browser";
+import { galleryQueryService } from "$lib/server/gallery-query-service";
 import { db } from "$lib/server/db";
-import {
-  imageAttributes,
-  imageTags,
-  tags,
-  collections,
-  collectionImages,
-} from "$lib/server/db/schema";
-import { evaluateSmartCollection } from "$lib/server/smart-collections";
-import { eq, sql, inArray } from "drizzle-orm";
+import { tags } from "$lib/server/db/schema";
+import { eq, like } from "drizzle-orm";
+import type {
+  FilterCriteria,
+  SortOption,
+  PaginationOptions,
+  Cursor,
+} from "$lib/server/gallery-query-types";
 
-export const GET: RequestHandler = async ({ url }) => {
-  const outputDir = await getOutputDir();
-  if (!outputDir) {
-    return json(
-      { error: "ComfyUI output directory not configured" },
-      { status: 400 },
-    );
+/**
+ * Map old sort values to new SortOption format
+ */
+function mapSortParam(sort: string | null): SortOption {
+  if (!sort) return { field: "created_at", direction: "desc" };
+
+  // New format: "field-direction"
+  const newFormatMatch = sort.match(
+    /^(created_at|rating|filename|file_size)-(asc|desc)$/,
+  );
+  if (newFormatMatch) {
+    return {
+      field: newFormatMatch[1] as
+        | "created_at"
+        | "rating"
+        | "filename"
+        | "file_size",
+      direction: newFormatMatch[2] as "asc" | "desc",
+    };
   }
 
-  const page = parseInt(url.searchParams.get("page") || "1");
-  const pageSize = parseInt(url.searchParams.get("page_size") || "24");
-  const sort = (url.searchParams.get("sort") || "date-desc") as
-    | "date-desc"
-    | "date-asc"
-    | "name";
+  // Old format compatibility
+  switch (sort) {
+    case "date-desc":
+      return { field: "created_at", direction: "desc" };
+    case "date-asc":
+      return { field: "created_at", direction: "asc" };
+    case "name":
+      return { field: "filename", direction: "asc" };
+    default:
+      return { field: "created_at", direction: "desc" };
+  }
+}
 
-  // Filter params
+/**
+ * Parse cursor from JSON string
+ */
+function parseCursor(cursorStr: string | null): Cursor | undefined {
+  if (!cursorStr) return undefined;
+  try {
+    return JSON.parse(cursorStr) as Cursor;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Look up tag by name and return its ID
+ */
+async function lookupTagIdByName(tagName: string): Promise<number | null> {
+  const tagRows = await db
+    .select({ id: tags.id })
+    .from(tags)
+    .where(eq(tags.name, tagName))
+    .limit(1);
+  return tagRows[0]?.id ?? null;
+}
+
+/**
+ * Map ImageResult to the format expected by the frontend
+ * (compatible with the old BrowseImage format)
+ */
+function mapToFrontendFormat(image: any) {
+  return {
+    // Core fields (BrowseImage compatible)
+    filename: image.relativePath.split("/").pop() || image.relativePath,
+    relativePath: image.relativePath,
+
+    // Renamed for compatibility
+    size: image.fileSize,
+    modifiedAt: image.fileModifiedAt,
+    width: image.width,
+    height: image.height,
+    metadata:
+      image.positivePrompt || image.negativePrompt
+        ? {
+            positivePrompts: image.positivePrompt ? [image.positivePrompt] : [],
+            negativePrompts: image.negativePrompt ? [image.negativePrompt] : [],
+            models: image.extractedModels,
+            loras: image.extractedLoras,
+            width: image.width,
+            height: image.height,
+            samplers: image.extractedSamplers.map((s: string) => ({
+              id: "",
+              classType: "KSampler",
+              seed: image.seed,
+              steps: image.steps,
+              cfg: image.cfgScale,
+              samplerName: s,
+              scheduler: image.extractedSchedulers?.[0] ?? null,
+              denoise: null,
+            })),
+            rawPromptJson: null,
+          }
+        : null,
+
+    // User attributes
+    attributes: {
+      rating: image.rating ?? 0,
+      colorLabel: image.colorLabel,
+      flag: image.flag,
+      notes: image.notes,
+      stackId: image.stackId,
+    },
+
+    // Tags
+    tags: image.tags,
+
+    // Additional fields from ImageResult
+    aspectRatio: image.aspectRatio,
+    fileFormat: image.fileFormat,
+    hasAlpha: image.hasAlpha,
+    createdAt: image.createdAt,
+    updatedAt: image.updatedAt,
+    isMissing: image.isMissing,
+    extractedModels: image.extractedModels,
+    extractedLoras: image.extractedLoras,
+    extractedSamplers: image.extractedSamplers,
+    extractedSchedulers: image.extractedSchedulers,
+    steps: image.steps,
+    cfgScale: image.cfgScale,
+    seed: image.seed,
+    positivePrompt: image.positivePrompt,
+    negativePrompt: image.negativePrompt,
+    collectionIds: image.collectionIds,
+  };
+}
+
+/**
+ * Parse comma-separated string into array
+ */
+function parseCommaSeparated(value: string | null): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Parse aspect ratios parameter
+ */
+function parseAspectRatios(
+  value: string | null,
+): ("portrait" | "landscape" | "square")[] {
+  if (!value) return [];
+  const values = parseCommaSeparated(value);
+  const valid: ("portrait" | "landscape" | "square")[] = [];
+  for (const v of values) {
+    if (v === "portrait" || v === "landscape" || v === "square") {
+      valid.push(v);
+    }
+  }
+  return valid;
+}
+
+/**
+ * Parse file formats parameter
+ */
+function parseFileFormats(value: string | null): ("PNG" | "JPG" | "WebP")[] {
+  if (!value) return [];
+  const values = parseCommaSeparated(value);
+  const valid: ("PNG" | "JPG" | "WebP")[] = [];
+  for (const v of values) {
+    const upper = v.toUpperCase();
+    if (upper === "PNG" || upper === "JPG" || upper === "WEBP") {
+      valid.push((upper === "WEBP" ? "WebP" : upper) as "PNG" | "JPG" | "WebP");
+    }
+  }
+  return valid;
+}
+
+export const GET: RequestHandler = async ({ url }) => {
+  // Parse pagination params
+  const pageSize = parseInt(url.searchParams.get("page_size") || "50");
+  const cursorStr = url.searchParams.get("cursor");
+  const direction = (url.searchParams.get("direction") || "next") as
+    | "next"
+    | "prev";
+
+  // Parse sort param
+  const sortParam = url.searchParams.get("sort");
+  const sort = mapSortParam(sortParam);
+
+  // Build pagination options
+  const pagination: PaginationOptions = {
+    pageSize,
+    cursor: parseCursor(cursorStr),
+    direction,
+  };
+
+  // Parse filter params and build FilterCriteria
+  const filters: FilterCriteria = {};
+
+  // User marks filter
   const ratingMin = url.searchParams.get("rating_min");
+  const ratingMax = url.searchParams.get("rating_max");
   const colorLabel = url.searchParams.get("color_label");
   const flag = url.searchParams.get("flag");
   const tagFilter = url.searchParams.get("tag");
-  const collectionId = url.searchParams.get("collection_id");
-  const searchQuery = url.searchParams.get("search");
 
-  // When searching, fetch recent files to filter in-memory before slicing
-  const effectivePageSize = searchQuery ? 2000 : pageSize;
-  const effectivePage = searchQuery ? 1 : page;
-  const result = await browseImages(effectivePage, effectivePageSize, sort);
+  if (
+    ratingMin !== null ||
+    ratingMax !== null ||
+    colorLabel !== null ||
+    flag !== null ||
+    tagFilter !== null
+  ) {
+    filters.user = {};
 
-  // Enrich with attributes and tags from DB
-  if (result.images.length > 0) {
-    const paths = result.images.map((img) => img.relativePath);
-
-    // Batch inArray queries to stay under SQLite variable limits
-    const BATCH = 500;
-    const attrMap = new Map<string, (typeof imageAttributes)["$inferSelect"]>();
-    const tagMap = new Map<
-      string,
-      { id: number; name: string; slug: string }[]
-    >();
-
-    for (let i = 0; i < paths.length; i += BATCH) {
-      const batch = paths.slice(i, i + BATCH);
-
-      const attrs = await db
-        .select()
-        .from(imageAttributes)
-        .where(inArray(imageAttributes.relativePath, batch));
-      for (const a of attrs) attrMap.set(a.relativePath, a);
-
-      const imgTags = await db
-        .select({
-          relativePath: imageTags.relativePath,
-          tagId: tags.id,
-          tagName: tags.name,
-          tagSlug: tags.slug,
-        })
-        .from(imageTags)
-        .leftJoin(tags, eq(imageTags.tagId, tags.id))
-        .where(inArray(imageTags.relativePath, batch));
-      for (const t of imgTags) {
-        if (!t.tagId) continue;
-        const list = tagMap.get(t.relativePath) || [];
-        list.push({
-          id: t.tagId,
-          name: t.tagName || "",
-          slug: t.tagSlug || "",
-        });
-        tagMap.set(t.relativePath, list);
+    if (ratingMin !== null) {
+      filters.user.ratingMin = parseInt(ratingMin);
+    }
+    if (ratingMax !== null) {
+      filters.user.ratingMax = parseInt(ratingMax);
+    }
+    if (colorLabel !== null) {
+      filters.user.colorLabels = [colorLabel];
+    }
+    if (flag !== null) {
+      filters.user.flags = [flag];
+    }
+    if (tagFilter !== null) {
+      // Look up tag by name for backward compatibility
+      const tagId = await lookupTagIdByName(tagFilter);
+      if (tagId !== null) {
+        filters.user.tagIds = [tagId];
       }
-    }
-
-    // Attach to images
-    for (const img of result.images) {
-      const attr = attrMap.get(img.relativePath);
-      (img as any).attributes = attr
-        ? {
-            rating: attr.rating ?? 0,
-            colorLabel: attr.colorLabel,
-            flag: attr.flag,
-            notes: attr.notes,
-            stackId: attr.stackId,
-          }
-        : null;
-      (img as any).tags = tagMap.get(img.relativePath) || [];
-    }
-
-    // Apply filters (in-memory, post-fetch)
-    let filtered = result.images;
-    if (ratingMin) {
-      const min = parseInt(ratingMin);
-      filtered = filtered.filter(
-        (img) => ((img as any).attributes?.rating ?? 0) >= min,
-      );
-    }
-    if (colorLabel) {
-      filtered = filtered.filter(
-        (img) => (img as any).attributes?.colorLabel === colorLabel,
-      );
-    }
-    if (flag) {
-      filtered = filtered.filter(
-        (img) => (img as any).attributes?.flag === flag,
-      );
-    }
-    if (tagFilter) {
-      filtered = filtered.filter((img) => {
-        const imgTagList = (img as any).tags as { name: string }[];
-        return imgTagList.some((t) => t.name === tagFilter);
-      });
-    }
-
-    if (collectionId) {
-      const cid = parseInt(collectionId);
-      if (!isNaN(cid)) {
-        const collRows = await db
-          .select()
-          .from(collections)
-          .where(eq(collections.id, cid));
-        const coll = collRows[0];
-        if (coll?.isSmart && coll.smartCriteria) {
-          try {
-            const criteria = JSON.parse(coll.smartCriteria);
-            const smartPaths = await evaluateSmartCollection(criteria);
-            const smartPathSet = new Set(smartPaths);
-            filtered = filtered.filter((img) =>
-              smartPathSet.has(img.relativePath),
-            );
-          } catch {
-            /* invalid criteria */
-          }
-        } else {
-          const collImgs = await db
-            .select({ relativePath: collectionImages.relativePath })
-            .from(collectionImages)
-            .where(eq(collectionImages.collectionId, cid));
-          const collPathSet = new Set(collImgs.map((ci) => ci.relativePath));
-          filtered = filtered.filter((img) =>
-            collPathSet.has(img.relativePath),
-          );
-        }
-      }
-    }
-
-    if (filtered.length !== result.images.length) {
-      const removed = result.images.length - filtered.length;
-      result.images = filtered;
-      result.total -= removed;
-    }
-
-    // Search filter: match against positive/negative prompts
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      filtered = result.images.filter((img) => {
-        const meta = (img as any).metadata as {
-          positivePrompts?: string[];
-          negativePrompts?: string[];
-        } | null;
-        if (!meta) return false;
-        const positiveMatch = meta.positivePrompts?.some((p) =>
-          p.toLowerCase().includes(q),
-        );
-        const negativeMatch = meta.negativePrompts?.some((p) =>
-          p.toLowerCase().includes(q),
-        );
-        return positiveMatch || negativeMatch;
-      });
-      result.images = filtered;
-      result.total = filtered.length;
-    }
-
-    // Re-paginate after search filtering
-    if (searchQuery) {
-      const start = (page - 1) * pageSize;
-      const pagedImages = filtered.slice(start, start + pageSize);
-      return json({
-        images: pagedImages,
-        total: filtered.length,
-        page,
-        pageSize,
-        hasMore: start + pageSize < filtered.length,
-      });
     }
   }
 
-  return json(result);
+  // Text search filter (backward compat: "search" maps to positivePrompt)
+  const searchQuery = url.searchParams.get("search");
+  const positivePrompt = url.searchParams.get("positive_prompt");
+  const negativePrompt = url.searchParams.get("negative_prompt");
+
+  if (
+    searchQuery !== null ||
+    positivePrompt !== null ||
+    negativePrompt !== null
+  ) {
+    filters.text = {};
+    if (searchQuery !== null) {
+      filters.text.positivePrompt = searchQuery;
+    }
+    if (positivePrompt !== null) {
+      filters.text.positivePrompt = positivePrompt;
+    }
+    if (negativePrompt !== null) {
+      filters.text.negativePrompt = negativePrompt;
+    }
+  }
+
+  // Collection filter
+  const collectionId = url.searchParams.get("collection_id");
+  if (collectionId !== null) {
+    const cid = parseInt(collectionId);
+    if (!isNaN(cid)) {
+      filters.collection = { collectionId: cid };
+    }
+  }
+
+  // Folder filter (path_prefix)
+  const pathPrefix = url.searchParams.get("path_prefix");
+  if (pathPrefix !== null) {
+    filters.folder = { pathPrefix };
+  }
+
+  // Generation params filter (models, loras, samplers, schedulers, steps, cfg, seed)
+  const models = parseCommaSeparated(url.searchParams.get("models"));
+  const loras = parseCommaSeparated(url.searchParams.get("loras"));
+  const samplers = parseCommaSeparated(url.searchParams.get("samplers"));
+  const schedulers = parseCommaSeparated(url.searchParams.get("schedulers"));
+  const stepsMin = url.searchParams.get("steps_min");
+  const stepsMax = url.searchParams.get("steps_max");
+  const cfgMin = url.searchParams.get("cfg_min");
+  const cfgMax = url.searchParams.get("cfg_max");
+  const seed = url.searchParams.get("seed");
+
+  if (
+    models.length > 0 ||
+    loras.length > 0 ||
+    samplers.length > 0 ||
+    schedulers.length > 0 ||
+    stepsMin !== null ||
+    stepsMax !== null ||
+    cfgMin !== null ||
+    cfgMax !== null ||
+    seed !== null
+  ) {
+    filters.generation = {};
+
+    if (models.length > 0) {
+      filters.generation.models = models;
+    }
+    if (loras.length > 0) {
+      filters.generation.loras = loras;
+    }
+    if (samplers.length > 0) {
+      filters.generation.samplers = samplers;
+    }
+    if (schedulers.length > 0) {
+      filters.generation.schedulers = schedulers;
+    }
+    if (stepsMin !== null) {
+      filters.generation.stepsMin = parseInt(stepsMin);
+    }
+    if (stepsMax !== null) {
+      filters.generation.stepsMax = parseInt(stepsMax);
+    }
+    if (cfgMin !== null) {
+      filters.generation.cfgMin = parseFloat(cfgMin);
+    }
+    if (cfgMax !== null) {
+      filters.generation.cfgMax = parseFloat(cfgMax);
+    }
+    if (seed !== null) {
+      filters.generation.seed = seed;
+    }
+  }
+
+  // Properties filter (width, height, aspect ratios, file formats, has alpha)
+  const widthMin = url.searchParams.get("width_min");
+  const widthMax = url.searchParams.get("width_max");
+  const heightMin = url.searchParams.get("height_min");
+  const heightMax = url.searchParams.get("height_max");
+  const aspectRatios = parseAspectRatios(url.searchParams.get("aspect_ratios"));
+  const fileFormats = parseFileFormats(url.searchParams.get("file_formats"));
+  const hasAlpha = url.searchParams.get("has_alpha");
+
+  if (
+    widthMin !== null ||
+    widthMax !== null ||
+    heightMin !== null ||
+    heightMax !== null ||
+    aspectRatios.length > 0 ||
+    fileFormats.length > 0 ||
+    hasAlpha !== null
+  ) {
+    filters.properties = {};
+
+    if (widthMin !== null) {
+      filters.properties.widthMin = parseInt(widthMin);
+    }
+    if (widthMax !== null) {
+      filters.properties.widthMax = parseInt(widthMax);
+    }
+    if (heightMin !== null) {
+      filters.properties.heightMin = parseInt(heightMin);
+    }
+    if (heightMax !== null) {
+      filters.properties.heightMax = parseInt(heightMax);
+    }
+    if (aspectRatios.length > 0) {
+      filters.properties.aspectRatios = aspectRatios;
+    }
+    if (fileFormats.length > 0) {
+      filters.properties.fileFormats = fileFormats;
+    }
+    if (hasAlpha !== null) {
+      filters.properties.hasAlpha = hasAlpha === "true" || hasAlpha === "1";
+    }
+  }
+
+  // Query the database
+  const result = await galleryQueryService.query(filters, sort, pagination);
+
+  // Map results to frontend-compatible format
+  const images = result.images.map(mapToFrontendFormat);
+
+  // Return in the format the frontend expects
+  // For backward compatibility, include both "page" (derived) and cursor info
+  return json({
+    images,
+    total: result.total,
+    pageSize: result.pageSize,
+    hasMore: result.hasMore,
+    hasLess: result.hasLess,
+    nextCursor: result.nextCursor ? JSON.stringify(result.nextCursor) : null,
+    prevCursor: result.prevCursor ? JSON.stringify(result.prevCursor) : null,
+  });
 };
