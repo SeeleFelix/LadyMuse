@@ -122,8 +122,8 @@ export interface ImageResult {
   fileSize: number | null;
   fileFormat: string | null;
   hasAlpha: boolean | null;
-  createdAt: string | null;
-  updatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
   fileModifiedAt: string | null;
   isMissing: boolean | null;
   extractedModels: string[];
