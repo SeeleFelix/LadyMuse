@@ -37,7 +37,7 @@ Replaces the current `comfyui-watcher.ts` which only listens for new files.
 
 - Scan all image files on disk, compare against `image_attributes` table
 - New files on disk: extract metadata and insert into database
-- Database records with no corresponding file: mark as `missing`
+- Database records with no corresponding file: mark as `missing` (shown dimmed in UI, excluded from queries by default, auto-deleted after 7 days)
 - Files on disk not in database: extract metadata and insert
 
 ### Periodic Validation (Fallback)
@@ -76,8 +76,12 @@ From the ComfyUI workflow, extract searchable fields into dedicated columns (JSO
 | `extractedModels` | JSON array | All checkpoint model names |
 | `extractedLoras` | JSON array | All LoRA model names |
 | `extractedSamplers` | JSON array | All sampler names |
+| `extractedSchedulers` | JSON array | All scheduler names |
 | `positivePrompt` | TEXT | Positive prompt text |
 | `negativePrompt` | TEXT | Negative prompt text |
+| `steps` | INTEGER | Steps value (0 if not extractable) |
+| `cfgScale` | REAL | CFG scale value (0 if not extractable) |
+| `seed` | TEXT | Seed value (text to preserve full precision) |
 
 ### Image Physical Properties
 
