@@ -147,18 +147,9 @@ describe("FileSyncService", () => {
   });
 
   describe("debounce", () => {
-    it("debounce - rapid calls are batched", async () => {
+    it("debounce - rapid handleFileAdded calls result in single broadcast", async () => {
       const service = new FileSyncService(testDir, { debounceMs: 100 });
 
-      const callCounts: Record<string, number> = {};
-
-      // Mock the debounceEvent to track calls
-      const originalBroadcast = service.broadcast.bind(service);
-      const mockBroadcast = vi.fn((event) => {
-        callCounts[event.path] = (callCounts[event.path] || 0) + 1;
-      });
-
-      // We can't easily mock private method, so test through subscribe
       const events: Array<{ type: string; path: string }> = [];
       service.subscribe((event) => events.push(event));
 
@@ -166,27 +157,122 @@ describe("FileSyncService", () => {
       const filePath = join(testDir, "rapid.png");
       createTestPng(filePath);
 
-      // Rapidly trigger multiple "add" events (simulating what debounceEvent would batch)
-      // Since we can't directly access the private debounceEvent, we'll test
-      // the debouncing behavior indirectly through the service's public API
+      // Rapidly call handleFileAdded multiple times for the same file
+      // In production, chokidar might emit multiple events for the same file
+      for (let i = 0; i < 5; i++) {
+        // @ts-expect-error - accessing private method for test
+        service.handleFileAdded(filePath);
+      }
 
-      // The actual debouncing happens inside handleFileAdded/handleFileChanged
-      // which are private. For this test, we verify the debounce mechanism exists
-      // by checking that the service has the debounce timers map
+      // Wait for debounce to complete (100ms debounce + small buffer)
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
-      // @ts-expect-error - accessing private property for test
-      expect(service.debounceTimers).toBeDefined();
-      expect(service.debounceTimers).toBeInstanceOf(Map);
+      // Should only have ONE "add" event, not 5
+      expect(events).toHaveLength(1);
+      expect(events[0]).toEqual({ type: "add", path: "rapid.png" });
     });
 
-    it("debounce - different event types are tracked separately", () => {
+    it("debounce - different files are tracked separately", async () => {
       const service = new FileSyncService(testDir, { debounceMs: 100 });
 
-      // @ts-expect-error - accessing private property for test
-      const timers = service.debounceTimers;
+      const events: Array<{ type: string; path: string }> = [];
+      service.subscribe((event) => events.push(event));
 
-      // Verify debounce timers map exists
-      expect(timers).toBeInstanceOf(Map);
+      // Create two different files
+      const file1 = join(testDir, "file1.png");
+      const file2 = join(testDir, "file2.png");
+      createTestPng(file1);
+      createTestPng(file2);
+
+      // Rapidly call for both files
+      for (let i = 0; i < 3; i++) {
+        // @ts-expect-error - accessing private method for test
+        service.handleFileAdded(file1);
+        // @ts-expect-error - accessing private method for test
+        service.handleFileAdded(file2);
+      }
+
+      // Wait for debounce
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // Should have exactly 2 events (one per file)
+      expect(events).toHaveLength(2);
+
+      const paths = events.map((e) => e.path).sort();
+      expect(paths).toEqual(["file1.png", "file2.png"]);
+    });
+
+    it("debounce - handleFileChanged also debounces", async () => {
+      const service = new FileSyncService(testDir, { debounceMs: 100 });
+
+      const events: Array<{ type: string; path: string }> = [];
+      service.subscribe((event) => events.push(event));
+
+      // Create test file and add it to DB first
+      const filePath = join(testDir, "modify.png");
+      createTestPng(filePath);
+
+      // Insert into DB so handleFileChanged processes it
+      await testDbClient.insert(schema.imageAttributes).values({
+        relativePath: "modify.png",
+        width: 512,
+        height: 512,
+        aspectRatio: "square",
+        fileFormat: "PNG",
+        fileSize: 1000,
+        fileModifiedAt: new Date().toISOString(),
+        isMissing: false,
+      });
+
+      // Rapidly call handleFileChanged multiple times
+      // Add a tiny bit of spacing to simulate rapid but not instantaneous events
+      for (let i = 0; i < 4; i++) {
+        // @ts-expect-error - accessing private method for test
+        service.handleFileChanged(filePath);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+
+      // Wait for debounce (longer since we added delays)
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      // Should only have ONE "modify" event (debounced from 4 calls)
+      const modifyEvents = events.filter((e) => e.type === "modify");
+      expect(modifyEvents).toHaveLength(1);
+      expect(modifyEvents[0]).toEqual({ type: "modify", path: "modify.png" });
+    });
+
+    it("debounce - handleFileDeleted also debounces", async () => {
+      const service = new FileSyncService(testDir, { debounceMs: 100 });
+
+      const events: Array<{ type: string; path: string }> = [];
+      service.subscribe((event) => events.push(event));
+
+      // Insert record for a "deleted" file
+      await testDbClient.insert(schema.imageAttributes).values({
+        relativePath: "deleted.png",
+        width: 512,
+        height: 512,
+        aspectRatio: "square",
+        fileFormat: "PNG",
+        fileSize: 1000,
+        fileModifiedAt: new Date().toISOString(),
+        isMissing: false,
+      });
+
+      const filePath = join(testDir, "deleted.png");
+
+      // Rapidly call handleFileDeleted multiple times
+      for (let i = 0; i < 3; i++) {
+        // @ts-expect-error - accessing private method for test
+        service.handleFileDeleted(filePath);
+      }
+
+      // Wait for debounce
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // Should only have ONE "delete" event
+      expect(events).toHaveLength(1);
+      expect(events[0]).toEqual({ type: "delete", path: "deleted.png" });
     });
   });
 
