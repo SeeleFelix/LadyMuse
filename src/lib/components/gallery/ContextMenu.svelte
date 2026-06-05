@@ -1,29 +1,5 @@
 <script lang="ts">
-  interface BrowseImage {
-    filename: string;
-    relativePath: string;
-    size: number;
-    modifiedAt: string;
-    width: number | null;
-    height: number | null;
-    metadata: {
-      positivePrompts: string[];
-      negativePrompts: string[];
-      models: string[];
-      loras: string[];
-      width: number | null;
-      height: number | null;
-      samplers: any[];
-    } | null;
-    attributes?: {
-      rating: number;
-      colorLabel: string | null;
-      flag: string | null;
-      notes: string | null;
-      stackId: number | null;
-    } | null;
-    tags?: { id: number; name: string; slug: string }[];
-  }
+  import type { ImageResult } from "$lib/stores/gallery-store";
 
   interface Collection {
     id: number;
@@ -50,7 +26,7 @@
   }: {
     x: number;
     y: number;
-    image: BrowseImage | null;
+    image: ImageResult | null;
     selectedCount?: number;
     collections?: Collection[];
     onclose: () => void;
@@ -81,8 +57,8 @@
   };
 
   const isMulti = $derived(selectedCount > 1);
-  const currentRating = $derived(image?.attributes?.rating ?? 0);
-  const hasPrompt = $derived(!!image?.metadata?.positivePrompts?.length);
+  const currentRating = $derived(image?.rating ?? 0);
+  const hasPrompt = $derived(!!image?.positivePrompt);
 
   $effect(() => {
     if (menuEl) {
@@ -580,10 +556,10 @@
       <button
         class="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700 text-left"
       >
-        {#if image?.attributes?.colorLabel}
+        {#if image?.colorLabel}
           <span
             class="w-3.5 h-3.5 rounded-full shrink-0 {colorMap[
-              image.attributes.colorLabel
+              image.colorLabel
             ] || 'bg-zinc-400'}"
           ></span>
         {:else}
@@ -633,7 +609,7 @@
             >
               <span class="w-3 h-3 rounded-full {colorMap[key]}"></span>
               <span>{label}</span>
-              {#if image?.attributes?.colorLabel === key}
+              {#if image?.colorLabel === key}
                 <span class="text-violet-400 ml-auto">✓</span>
               {/if}
             </button>
@@ -666,9 +642,9 @@
           />
         </svg>
         <span class="flex-1">标记</span>
-        {#if image?.attributes?.flag === "pick"}
+        {#if image?.flag === "pick"}
           <span class="text-green-400 text-[10px]">P</span>
-        {:else if image?.attributes?.flag === "reject"}
+        {:else if image?.flag === "reject"}
           <span class="text-red-400 text-[10px]">R</span>
         {/if}
         <svg
@@ -712,7 +688,7 @@
               />
             </svg>
             Pick
-            {#if image?.attributes?.flag === "pick"}
+            {#if image?.flag === "pick"}
               <span class="text-violet-400 ml-auto">✓</span>
             {/if}
           </button>
@@ -734,7 +710,7 @@
               />
             </svg>
             Reject
-            {#if image?.attributes?.flag === "reject"}
+            {#if image?.flag === "reject"}
               <span class="text-violet-400 ml-auto">✓</span>
             {/if}
           </button>
