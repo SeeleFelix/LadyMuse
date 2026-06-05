@@ -565,7 +565,7 @@ export class GalleryQueryService {
     sort: SortOption = { field: "created_at", direction: "desc" },
     pagination: PaginationOptions = {},
   ): Promise<QueryResult> {
-    const pageSize = pagination.pageSize ?? 50;
+    const pageSize = Math.min(pagination.pageSize ?? 50, 200);
     const direction = pagination.direction ?? "next";
 
     // Build WHERE clause
@@ -649,8 +649,8 @@ export class GalleryQueryService {
       fileSize: row.fileSize,
       fileFormat: row.fileFormat,
       hasAlpha: row.hasAlpha,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
+      createdAt: row.createdAt ?? "",
+      updatedAt: row.updatedAt ?? "",
       fileModifiedAt: row.fileModifiedAt,
       isMissing: row.isMissing,
       extractedModels: this.parseJsonArray(row.extractedModels),
@@ -676,13 +676,13 @@ export class GalleryQueryService {
             field: sort.field,
             value:
               sort.field === "rating"
-                ? lastImage.rating
+                ? (lastImage.rating ?? 0)
                 : sort.field === "file_size"
-                  ? lastImage.fileSize
+                  ? (lastImage.fileSize ?? 0)
                   : sort.field === "width"
-                    ? lastImage.width
+                    ? (lastImage.width ?? 0)
                     : sort.field === "height"
-                      ? lastImage.height
+                      ? (lastImage.height ?? 0)
                       : lastImage.createdAt,
             direction: sort.direction,
             path: lastImage.relativePath,
@@ -695,23 +695,25 @@ export class GalleryQueryService {
             field: sort.field,
             value:
               sort.field === "rating"
-                ? firstImage.rating
+                ? (firstImage.rating ?? 0)
                 : sort.field === "file_size"
-                  ? firstImage.fileSize
+                  ? (firstImage.fileSize ?? 0)
                   : sort.field === "width"
-                    ? firstImage.width
+                    ? (firstImage.width ?? 0)
                     : sort.field === "height"
-                      ? firstImage.height
+                      ? (firstImage.height ?? 0)
                       : firstImage.createdAt,
             direction: sort.direction,
             path: firstImage.relativePath,
           }
         : null;
 
-    // Get total count (expensive operation, only if needed)
-    // For now, return -1 to indicate not calculated
-    // Could be optimized with COUNT query in a separate method
-    const total = -1;
+    // Get total count using COUNT query
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(imageAttributes)
+      .where(where ?? sql`1=1`);
+    const total = countResult[0]?.count ?? 0;
 
     return {
       images,
