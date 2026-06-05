@@ -9,6 +9,7 @@ import {
 import { eq, sql } from "drizzle-orm";
 import { resolveImagePath, clearCache } from "$lib/server/comfyui-browser";
 import { unlinkSync } from "node:fs";
+import { broadcastDeletion } from "$lib/server/file-sync-service";
 
 export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json();
@@ -42,6 +43,9 @@ export const POST: RequestHandler = async ({ request }) => {
   await db
     .delete(imageAttributes)
     .where(eq(imageAttributes.relativePath, relative_path));
+
+  // Notify all connected clients of the deletion
+  broadcastDeletion(relative_path);
 
   return json({ success: true });
 };
