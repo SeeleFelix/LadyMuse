@@ -401,26 +401,27 @@ export function createGalleryStore(api: {
     loadPage();
   }
 
+  // Debounce timer for batching rapid-fire SSE events into a single reload
+  let _refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
   /**
    * Handle server-sent events for file changes
    */
   function handleSSEEvent(event: FileEvent) {
-    if (event.type === "add") {
-      // Reload to include new image
-      untrack(() => loadPage());
-    } else if (event.type === "delete") {
+    if (event.type === "delete") {
       images = images.filter((img) => img.relativePath !== event.path);
       _removeSelection(event.path);
       if (activeImage?.relativePath === event.path) {
         activeImage = images[0] ?? null;
       }
       pagination.total = Math.max(0, pagination.total - 1);
-    } else if (event.type === "modify") {
-      const idx = images.findIndex((img) => img.relativePath === event.path);
-      if (idx >= 0) {
-        // Refresh to get updated metadata
+    } else {
+      // Debounce add/modify: batch rapid-fire events into a single reload
+      if (_refreshTimer) clearTimeout(_refreshTimer);
+      _refreshTimer = setTimeout(() => {
+        _refreshTimer = null;
         untrack(() => loadPage());
-      }
+      }, 500);
     }
   }
 

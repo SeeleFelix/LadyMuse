@@ -47,7 +47,7 @@ export class FileSyncService {
     if (this.watcher) return;
 
     this.watcher = watch(this.outputDir, {
-      ignoreInitial: false,
+      ignoreInitial: true,
       persistent: true,
     });
 
