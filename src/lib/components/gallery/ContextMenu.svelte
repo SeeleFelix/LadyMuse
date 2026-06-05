@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ImageResult } from "$lib/stores/gallery-store";
+  import type { ImageResult } from "$lib/stores/gallery-store.svelte";
 
   interface Collection {
     id: number;

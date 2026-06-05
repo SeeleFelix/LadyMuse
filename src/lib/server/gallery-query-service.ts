@@ -391,8 +391,8 @@ export class GalleryQueryService {
     switch (field) {
       case "created_at":
         return imageAttributes.createdAt;
-      case "updated_at":
-        return imageAttributes.updatedAt;
+      case "modified_at":
+        return imageAttributes.fileModifiedAt;
       case "rating":
         return imageAttributes.rating;
       case "file_size":
@@ -422,17 +422,16 @@ export class GalleryQueryService {
     const sortColumn = this.getSortColumn(sort.field);
     const pathColumn = imageAttributes.relativePath;
 
-    // For descending sort
+    // Key: the tiebreaker (relativePath) follows the same sort direction as the main column.
+    // For DESC: larger values come first, so "next" means smaller path values.
+    // For ASC:  smaller values come first, so "next" means larger path values.
     if (sort.direction === "desc") {
       if (direction === "next") {
-        // Get rows with sort value < cursor OR same value and path < cursor path
-        return sql`(${sortColumn} < ${cursor.value} OR (${sortColumn} = ${cursor.value} AND ${pathColumn} > ${cursor.path}))`;
+        return sql`(${sortColumn} < ${cursor.value} OR (${sortColumn} = ${cursor.value} AND ${pathColumn} < ${cursor.path}))`;
       } else {
-        // Previous page: reverse condition
-        return sql`(${sortColumn} > ${cursor.value} OR (${sortColumn} = ${cursor.value} AND ${pathColumn} < ${cursor.path}))`;
+        return sql`(${sortColumn} > ${cursor.value} OR (${sortColumn} = ${cursor.value} AND ${pathColumn} > ${cursor.path}))`;
       }
     } else {
-      // For ascending sort
       if (direction === "next") {
         return sql`(${sortColumn} > ${cursor.value} OR (${sortColumn} = ${cursor.value} AND ${pathColumn} > ${cursor.path}))`;
       } else {
@@ -568,8 +567,11 @@ export class GalleryQueryService {
     const pageSize = Math.min(pagination.pageSize ?? 50, 200);
     const direction = pagination.direction ?? "next";
 
-    // Build WHERE clause
+    // Build WHERE clause (with cursor condition for keyset pagination)
     const where = this.buildWhereClause(filters, sort, pagination);
+
+    // Build WHERE clause without cursor for accurate total count
+    const whereWithoutCursor = this.buildWhereClause(filters, sort, {});
 
     // Determine sort order
     // For prev page, we reverse the order to get the previous items
@@ -628,12 +630,19 @@ export class GalleryQueryService {
     // If going backwards, reverse the results to get correct order
     const orderedRows = isReversed ? pageRows.reverse() : pageRows;
 
-    // Get paths for batch fetching tags and collection IDs
+    // Get paths for batch fetching
     const paths = orderedRows.map((r) => r.relativePath);
-    const [tagsMap, collectionsMap] = await Promise.all([
+
+    // Run COUNT, tags, and collections in parallel
+    const [tagsMap, collectionsMap, countResult] = await Promise.all([
       this.fetchTagsForPaths(paths),
       this.fetchCollectionIdsForPaths(paths),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(imageAttributes)
+        .where(whereWithoutCursor ?? sql`1=1`),
     ]);
+    const total = countResult[0]?.count ?? 0;
 
     // Transform to ImageResult
     const images: ImageResult[] = orderedRows.map((row) => ({
@@ -683,7 +692,9 @@ export class GalleryQueryService {
                     ? (lastImage.width ?? 0)
                     : sort.field === "height"
                       ? (lastImage.height ?? 0)
-                      : lastImage.createdAt,
+                      : sort.field === "modified_at"
+                        ? lastImage.fileModifiedAt
+                        : lastImage.createdAt,
             direction: sort.direction,
             path: lastImage.relativePath,
           }
@@ -702,18 +713,13 @@ export class GalleryQueryService {
                     ? (firstImage.width ?? 0)
                     : sort.field === "height"
                       ? (firstImage.height ?? 0)
-                      : firstImage.createdAt,
+                      : sort.field === "modified_at"
+                        ? firstImage.fileModifiedAt
+                        : firstImage.createdAt,
             direction: sort.direction,
             path: firstImage.relativePath,
           }
         : null;
-
-    // Get total count using COUNT query
-    const countResult = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(imageAttributes)
-      .where(where ?? sql`1=1`);
-    const total = countResult[0]?.count ?? 0;
 
     return {
       images,

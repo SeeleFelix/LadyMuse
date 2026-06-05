@@ -1,4 +1,4 @@
-import type { FileEvent } from "$lib/stores/gallery-store";
+import type { FileEvent } from "$lib/stores/gallery-store.svelte";
 
 export function createSSEClient(callback: (event: FileEvent) => void) {
   let eventSource: EventSource | null = null;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { FilterCriteria } from "$lib/stores/gallery-store";
+  import type { FilterCriteria } from "$lib/stores/gallery-store.svelte";
 
   let {
     filters,

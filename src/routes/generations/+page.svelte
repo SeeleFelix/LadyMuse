@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { createGalleryStore } from "$lib/stores/gallery-store";
+  import { createGalleryStore } from "$lib/stores/gallery-store.svelte";
   import { galleryAPI } from "$lib/services/gallery-api";
   import { createSSEClient } from "$lib/services/sse-client";
   import LibraryView from "$lib/components/gallery/LibraryView.svelte";
@@ -13,7 +13,7 @@
   import ContextMenu from "$lib/components/gallery/ContextMenu.svelte";
   import ConfirmDialog from "$lib/components/gallery/ConfirmDialog.svelte";
   import CollectionPanel from "$lib/components/gallery/CollectionPanel.svelte";
-  import type { ImageResult } from "$lib/stores/gallery-store";
+  import type { ImageResult } from "$lib/stores/gallery-store.svelte";
 
   interface Collection {
     id: number;
@@ -186,7 +186,7 @@
 
   function copyImageUrl() {
     if (!contextMenuImageResult) return;
-    const url = `${window.location.origin}/api/comfyui/image/${encodeURIComponent(contextMenuImageResult.relativePath)}`;
+    const url = `${window.location.origin}/api/comfyui/images/${encodeURIComponent(contextMenuImageResult.relativePath)}`;
     navigator.clipboard.writeText(url).then(
       () => showToast("图片链接已复制", "success"),
       () => showToast("复制失败", "error"),

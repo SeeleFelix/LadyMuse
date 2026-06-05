@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ImageResult } from "$lib/stores/gallery-store";
+  import type { ImageResult } from "$lib/stores/gallery-store.svelte";
 
   let {
     image,
@@ -26,7 +26,7 @@
   };
 
   function getImageUrl(): string {
-    return `/api/comfyui/image/${encodeURIComponent(image.relativePath)}`;
+    return `/api/comfyui/images/${encodeURIComponent(image.relativePath)}`;
   }
 
   function getFilename(): string {

@@ -1689,9 +1689,8 @@ describe("GalleryQueryService", () => {
       });
 
       expect(page2.images).toHaveLength(10);
-      // Total reflects items matching cursor condition (remaining items)
-      expect(page2.total).toBeLessThan(25);
-      expect(page2.total).toBeGreaterThan(10);
+      // Total reflects full count (cursor condition excluded from count)
+      expect(page2.total).toBe(25);
       expect(page2.hasMore).toBe(true);
       expect(page2.hasLess).toBe(true);
       expect(page2.nextCursor).not.toBeNull();

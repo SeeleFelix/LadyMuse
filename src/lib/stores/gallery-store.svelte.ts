@@ -38,7 +38,7 @@ export type ViewMode = "library" | "inspect" | "compare";
 
 export type SortField =
   | "created_at"
-  | "updated_at"
+  | "modified_at"
   | "rating"
   | "filename"
   | "file_size"
@@ -59,7 +59,8 @@ export interface Cursor {
 }
 
 export interface PaginationState {
-  cursor: Cursor | null;
+  nextCursor: Cursor | null;
+  prevCursor: Cursor | null;
   pageSize: number;
   total: number;
   hasMore: boolean;
@@ -177,11 +178,12 @@ export function createGalleryStore(api: {
   let activeImage = $state<ImageResult | null>(null);
   let filters = $state<FilterCriteria>({});
   let sortOrder = $state<SortOption>({
-    field: "created_at",
+    field: "modified_at",
     direction: "desc",
   });
   let pagination = $state<PaginationState>({
-    cursor: null,
+    nextCursor: null,
+    prevCursor: null,
     pageSize: 50,
     total: 0,
     hasMore: false,
@@ -200,7 +202,7 @@ export function createGalleryStore(api: {
   let hasSelection = $derived(selectedPaths.size > 0);
   let activeImageUrl = $derived(
     activeImage
-      ? `/api/comfyui/image/${encodeURIComponent(activeImage.relativePath)}`
+      ? `/api/comfyui/images/${encodeURIComponent(activeImage.relativePath)}`
       : null,
   );
 
@@ -212,10 +214,10 @@ export function createGalleryStore(api: {
     error = null;
     try {
       let cursor: Cursor | null = null;
-      if (direction === "next" && pagination.cursor) {
-        cursor = pagination.cursor;
-      } else if (direction === "prev" && pagination.cursor) {
-        cursor = pagination.cursor;
+      if (direction === "next") {
+        cursor = pagination.nextCursor;
+      } else if (direction === "prev") {
+        cursor = pagination.prevCursor;
       }
 
       const result = await api.query(filters, sortOrder, {
@@ -224,26 +226,23 @@ export function createGalleryStore(api: {
         direction,
       });
 
-      images = result.images;
+      // Append for infinite scroll, prepend for going back, replace for first load
+      if (direction === "next") {
+        images = [...images, ...result.images];
+      } else if (direction === "prev") {
+        images = [...result.images, ...images];
+      } else {
+        images = result.images;
+      }
+
       pagination = {
-        cursor: direction === "prev" ? result.prevCursor : result.nextCursor,
+        nextCursor: result.nextCursor,
+        prevCursor: result.prevCursor,
         pageSize: result.pageSize,
         total: result.total,
         hasMore: result.hasMore,
         hasLess: result.hasLess,
       };
-
-      // Clear selection if the current page doesn't contain selected images
-      const currentPaths = new Set(
-        result.images.map((img) => img.relativePath),
-      );
-      const remainingSelected = new Set<string>();
-      for (const path of selectedPaths) {
-        if (currentPaths.has(path)) {
-          remainingSelected.add(path);
-        }
-      }
-      selectedPaths = remainingSelected;
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -257,7 +256,8 @@ export function createGalleryStore(api: {
   function setFilters(newFilters: FilterCriteria) {
     filters = newFilters;
     pagination = {
-      cursor: null,
+      nextCursor: null,
+      prevCursor: null,
       pageSize: pagination.pageSize,
       total: 0,
       hasMore: false,
@@ -275,7 +275,8 @@ export function createGalleryStore(api: {
   function setSort(sort: SortOption) {
     sortOrder = sort;
     pagination = {
-      cursor: null,
+      nextCursor: null,
+      prevCursor: null,
       pageSize: pagination.pageSize,
       total: 0,
       hasMore: false,

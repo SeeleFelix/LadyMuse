@@ -1,6 +1,9 @@
 <script lang="ts">
   import DetailPanel from "./DetailPanel.svelte";
-  import type { GalleryStore, ImageResult } from "$lib/stores/gallery-store";
+  import type {
+    GalleryStore,
+    ImageResult,
+  } from "$lib/stores/gallery-store.svelte";
 
   interface Tag {
     id: number;
@@ -26,7 +29,7 @@
   let isTwoImageMode = $derived(selectionCount === 2);
 
   function getImageUrl(image: ImageResult): string {
-    return `/api/comfyui/image/${encodeURIComponent(image.relativePath)}`;
+    return `/api/comfyui/images/${encodeURIComponent(image.relativePath)}`;
   }
 
   function handleImageClick(image: ImageResult, side?: "left" | "right") {

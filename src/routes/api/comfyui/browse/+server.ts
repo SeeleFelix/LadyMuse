@@ -15,16 +15,17 @@ import type {
  * Map old sort values to new SortOption format
  */
 function mapSortParam(sort: string | null): SortOption {
-  if (!sort) return { field: "created_at", direction: "desc" };
+  if (!sort) return { field: "modified_at", direction: "desc" };
 
   // New format: "field-direction"
   const newFormatMatch = sort.match(
-    /^(created_at|rating|filename|file_size)-(asc|desc)$/,
+    /^(created_at|modified_at|rating|filename|file_size)-(asc|desc)$/,
   );
   if (newFormatMatch) {
     return {
       field: newFormatMatch[1] as
         | "created_at"
+        | "modified_at"
         | "rating"
         | "filename"
         | "file_size",
@@ -35,13 +36,13 @@ function mapSortParam(sort: string | null): SortOption {
   // Old format compatibility
   switch (sort) {
     case "date-desc":
-      return { field: "created_at", direction: "desc" };
+      return { field: "modified_at", direction: "desc" };
     case "date-asc":
-      return { field: "created_at", direction: "asc" };
+      return { field: "modified_at", direction: "asc" };
     case "name":
       return { field: "filename", direction: "asc" };
     default:
-      return { field: "created_at", direction: "desc" };
+      return { field: "modified_at", direction: "desc" };
   }
 }
 
@@ -389,7 +390,7 @@ export const GET: RequestHandler = async ({ url }) => {
     pageSize: result.pageSize,
     hasMore: result.hasMore,
     hasLess: result.hasLess,
-    nextCursor: result.nextCursor ? JSON.stringify(result.nextCursor) : null,
-    prevCursor: result.prevCursor ? JSON.stringify(result.prevCursor) : null,
+    nextCursor: result.nextCursor,
+    prevCursor: result.prevCursor,
   });
 };

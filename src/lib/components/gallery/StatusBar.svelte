@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ViewMode } from "$lib/stores/gallery-store";
+  import type { ViewMode } from "$lib/stores/gallery-store.svelte";
 
   let {
     totalImages = 0,

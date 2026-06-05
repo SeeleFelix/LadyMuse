@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount } from "svelte";
   import ThumbnailCard from "./ThumbnailCard.svelte";
-  import type { ImageResult } from "$lib/stores/gallery-store";
+  import type { ImageResult } from "$lib/stores/gallery-store.svelte";
 
   let {
     images = [],
@@ -38,19 +38,11 @@
       { rootMargin: "200px", threshold: 0 },
     );
 
-    return () => {
-      observer?.disconnect();
-    };
-  });
-
-  $effect(() => {
-    if (sentinelEl && observer) {
-      const el = sentinelEl;
-      observer.observe(el);
-      return () => {
-        if (el.isConnected) observer?.unobserve(el);
-      };
+    if (sentinelEl) {
+      observer.observe(sentinelEl);
     }
+
+    return () => observer?.disconnect();
   });
 </script>
 

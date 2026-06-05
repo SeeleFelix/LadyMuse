@@ -3,7 +3,7 @@
     ViewMode,
     SortOption,
     SortField,
-  } from "$lib/stores/gallery-store";
+  } from "$lib/stores/gallery-store.svelte";
 
   let {
     viewMode = "library",
@@ -46,8 +46,8 @@
   ];
 
   const sortOptions: { label: string; value: SortOption }[] = [
-    { label: "最新优先", value: { field: "created_at", direction: "desc" } },
-    { label: "最旧优先", value: { field: "created_at", direction: "asc" } },
+    { label: "最新优先", value: { field: "modified_at", direction: "desc" } },
+    { label: "最旧优先", value: { field: "modified_at", direction: "asc" } },
     { label: "评分从高到低", value: { field: "rating", direction: "desc" } },
     { label: "评分从低到高", value: { field: "rating", direction: "asc" } },
     { label: "文件名 (A-Z)", value: { field: "filename", direction: "asc" } },

@@ -4,7 +4,7 @@
   import FlagButtons from "./FlagButtons.svelte";
   import TagEditor from "./TagEditor.svelte";
   import MetadataViewer from "./MetadataViewer.svelte";
-  import type { ImageResult } from "$lib/stores/gallery-store";
+  import type { ImageResult } from "$lib/stores/gallery-store.svelte";
 
   interface Tag {
     id: number;
@@ -58,7 +58,7 @@
 
   function getImageUrl(): string {
     if (!image) return "";
-    return `/api/comfyui/image/${encodeURIComponent(image.relativePath)}`;
+    return `/api/comfyui/images/${encodeURIComponent(image.relativePath)}`;
   }
 
   function hasMetadata(): boolean {

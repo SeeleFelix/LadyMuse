@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { GalleryStore } from "$lib/stores/gallery-store";
+  import type { GalleryStore } from "$lib/stores/gallery-store.svelte";
 
   let { store }: { store: GalleryStore } = $props();
 

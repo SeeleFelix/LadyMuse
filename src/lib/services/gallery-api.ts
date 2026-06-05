@@ -3,7 +3,7 @@ import type {
   SortOption,
   ImageResult,
   Cursor,
-} from "$lib/stores/gallery-store";
+} from "$lib/stores/gallery-store.svelte";
 
 export interface QueryResult {
   images: ImageResult[];

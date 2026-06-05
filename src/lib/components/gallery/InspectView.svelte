@@ -1,7 +1,10 @@
 <script lang="ts">
   import DetailPanel from "./DetailPanel.svelte";
-  import type { GalleryStore, ImageResult } from "$lib/stores/gallery-store";
-  import type { ViewMode } from "$lib/stores/gallery-store";
+  import type {
+    GalleryStore,
+    ImageResult,
+  } from "$lib/stores/gallery-store.svelte";
+  import type { ViewMode } from "$lib/stores/gallery-store.svelte";
 
   interface Tag {
     id: number;
@@ -26,7 +29,7 @@
   );
 
   function getImageUrl(image: ImageResult): string {
-    return `/api/comfyui/image/${encodeURIComponent(image.relativePath)}`;
+    return `/api/comfyui/images/${encodeURIComponent(image.relativePath)}`;
   }
 
   function handleThumbnailClick(path: string) {

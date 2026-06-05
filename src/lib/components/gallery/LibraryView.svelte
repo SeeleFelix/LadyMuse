@@ -4,8 +4,8 @@
   import VirtualGrid from "./VirtualGrid.svelte";
   import DetailPanel from "./DetailPanel.svelte";
   import StatusBar from "./StatusBar.svelte";
-  import type { GalleryStore } from "$lib/stores/gallery-store";
-  import type { SortOption, ViewMode } from "$lib/stores/gallery-store";
+  import type { GalleryStore } from "$lib/stores/gallery-store.svelte";
+  import type { SortOption, ViewMode } from "$lib/stores/gallery-store.svelte";
 
   interface Tag {
     id: number;

@@ -70,7 +70,7 @@ export interface FilterCriteria {
 // Sort options
 export type SortField =
   | "created_at"
-  | "updated_at"
+  | "modified_at"
   | "rating"
   | "filename"
   | "file_size"
