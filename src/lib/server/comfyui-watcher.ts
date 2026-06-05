@@ -7,15 +7,17 @@ export function subscribe(fn: Subscriber): () => void {
     fn(event.path);
   };
 
-  // Get service lazily and subscribe
+  let cancelled = false;
   let unsub: (() => void) | null = null;
+
   getFileSyncService().then((service) => {
-    if (service) {
+    if (!cancelled && service) {
       unsub = service.subscribe(wrappedFn);
     }
   });
 
   return () => {
+    cancelled = true;
     unsub?.();
   };
 }
