@@ -132,7 +132,7 @@
   function navigateToIndex(idx: number) {
     const img = store.images[idx];
     if (img) {
-      store.select(img.relativePath, false, false, -1);
+      store.select(img.relativePath, false, false);
     }
   }
 </script>

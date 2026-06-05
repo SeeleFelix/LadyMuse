@@ -7,9 +7,21 @@
   import type { GalleryStore } from "$lib/stores/gallery-store";
   import type { SortOption, ViewMode } from "$lib/stores/gallery-store";
 
-  let { store }: { store: GalleryStore } = $props();
+  interface Tag {
+    id: number;
+    name: string;
+    slug: string;
+  }
 
-  let allTags = $state<{ id: number; name: string; slug: string }[]>([]);
+  let {
+    store,
+    oncontextmenu,
+    allTags = [],
+  }: {
+    store: GalleryStore;
+    oncontextmenu?: (path: string, e: MouseEvent) => void;
+    allTags?: Tag[];
+  } = $props();
 
   function handleSelect(path: string, e: MouseEvent) {
     const multi = e.shiftKey || e.ctrlKey;
@@ -24,7 +36,7 @@
 
   function handleContextMenu(path: string, e: MouseEvent) {
     e.preventDefault();
-    // Will be implemented with context menu
+    oncontextmenu?.(path, e);
   }
 
   function handleSortChange(sort: SortOption) {

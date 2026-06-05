@@ -2,9 +2,15 @@
   import DetailPanel from "./DetailPanel.svelte";
   import type { GalleryStore, ImageResult } from "$lib/stores/gallery-store";
 
-  let { store }: { store: GalleryStore } = $props();
+  interface Tag {
+    id: number;
+    name: string;
+    slug: string;
+  }
 
-  let allTags = $state<{ id: number; name: string; slug: string }[]>([]);
+  let { store, allTags = [] }: { store: GalleryStore; allTags?: Tag[] } =
+    $props();
+
   let leftDetailImage = $state<ImageResult | null>(null);
   let rightDetailImage = $state<ImageResult | null>(null);
   let gridDetailImage = $state<ImageResult | null>(null);

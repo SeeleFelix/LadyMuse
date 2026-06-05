@@ -3,12 +3,18 @@
   import type { GalleryStore, ImageResult } from "$lib/stores/gallery-store";
   import type { ViewMode } from "$lib/stores/gallery-store";
 
-  let { store }: { store: GalleryStore } = $props();
+  interface Tag {
+    id: number;
+    name: string;
+    slug: string;
+  }
+
+  let { store, allTags = [] }: { store: GalleryStore; allTags?: Tag[] } =
+    $props();
 
   type ZoomMode = "fit" | "100";
 
   let zoomMode = $state<ZoomMode>("fit");
-  let allTags = $state<{ id: number; name: string; slug: string }[]>([]);
 
   // Current image index for navigation
   let currentIndex = $derived(
