@@ -89,6 +89,7 @@ export interface Cursor {
   field: SortField;
   value: string | number | null;
   direction: SortDirection;
+  path: string;
 }
 
 export interface PaginationOptions {
@@ -121,8 +122,8 @@ export interface ImageResult {
   fileSize: number | null;
   fileFormat: string | null;
   hasAlpha: boolean | null;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: string | null;
+  updatedAt: string | null;
   fileModifiedAt: string | null;
   isMissing: boolean | null;
   extractedModels: string[];

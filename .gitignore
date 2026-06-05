@@ -1,31 +1,28 @@
-node_modules
 
-# Output
-.output
-.vercel
-.netlify
-.wrangler
-/.svelte-kit
 /build
-
-# OS
+data/
+# Database
+data.db.back
+*.db
+.db-backups/
+*.db-shm
+*.db-wal
 .DS_Store
-Thumbs.db
-
-# Env
 .env
 .env.*
+# Env
 !.env.example
 !.env.test
-
+.netlify
+node_modules
+# OS
+.output
+# Output
+.superpowers/
+/.svelte-kit
+Thumbs.db
+.vercel
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
-
-# Database
-*.db
-*.db-shm
-*.db-wal
-data/
-data.db.back
-.db-backups/
+.wrangler
