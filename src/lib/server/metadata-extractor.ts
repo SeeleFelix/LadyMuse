@@ -1,12 +1,12 @@
 import { statSync } from "node:fs";
 import { openSync, readSync, closeSync } from "node:fs";
 import { Buffer } from "node:buffer";
-import type { ComfyUIMetadata, SamplerInfo } from "./png-metadata.js";
+import type { ComfyUIMetadata, SamplerInfo } from "./png-metadata";
 import {
   extractPngTextChunks,
   parseComfyUIPngMetadata,
   readPngDimensions,
-} from "./png-metadata.js";
+} from "./png-metadata";
 
 // PNG color type values from IHDR
 const PNG_COLOR_TYPE_GRAYSCALE = 0;
@@ -17,31 +17,30 @@ const PNG_COLOR_TYPE_RGBA = 6;
 
 export interface ExtractedImageMetadata {
   // Raw PNG text chunks preserved
-  rawChunks: Array<{ type: string; keyword: string; text: string }>;
+  rawChunks: { keyword: string; text: string }[];
 
   // Extracted from ComfyUI metadata
-  models: string[];
-  loras: string[];
-  samplers: string[];
-  schedulers: string[];
+  extractedModels: string[];
+  extractedLoras: string[];
+  extractedSamplers: string[];
+  extractedSchedulers: string[];
   positivePrompt: string;
   negativePrompt: string;
 
   // Sampler parameters from first sampler
-  steps: number | null;
-  cfgScale: number | null;
-  seed: number | null;
+  steps: number;
+  cfgScale: number;
+  seed: string;
 
   // Image dimensions and properties
   width: number | null;
   height: number | null;
-  aspectRatio: number;
-  aspectRatioClass: "portrait" | "landscape" | "square";
+  aspectRatio: "portrait" | "landscape" | "square" | null;
 
   // File properties
   fileSize: number;
-  fileFormat: string;
-  colorSpace: string;
+  fileFormat: "PNG" | "JPG" | "WebP";
+  colorSpace: string | null;
   hasAlpha: boolean;
 
   // Timestamp
@@ -65,14 +64,14 @@ export function classifyAspectRatio(
 
 /**
  * Detect file format from extension.
- * Returns "png", "jpeg", or "webp". Returns "unknown" for unrecognized extensions.
+ * Returns "PNG", "JPG", or "WebP". Returns "PNG" as fallback for unrecognized extensions.
  */
-export function detectFileFormat(filePath: string): string {
+export function detectFileFormat(filePath: string): "PNG" | "JPG" | "WebP" {
   const ext = filePath.toLowerCase().slice(filePath.lastIndexOf("."));
-  if (ext === ".png") return "png";
-  if (ext === ".jpg" || ext === ".jpeg") return "jpeg";
-  if (ext === ".webp") return "webp";
-  return "unknown";
+  if (ext === ".png") return "PNG";
+  if (ext === ".jpg" || ext === ".jpeg") return "JPG";
+  if (ext === ".webp") return "WebP";
+  return "PNG";
 }
 
 /**
@@ -80,18 +79,18 @@ export function detectFileFormat(filePath: string): string {
  * Returns an object with seed, steps, and cfg from the primary sampler.
  */
 export function extractFirstSampler(samplers: SamplerInfo[]): {
-  seed: number | null;
-  steps: number | null;
-  cfg: number | null;
+  seed: string;
+  steps: number;
+  cfg: number;
 } {
   if (samplers.length === 0) {
-    return { seed: null, steps: null, cfg: null };
+    return { seed: "0", steps: 0, cfg: 0 };
   }
   const first = samplers[0];
   return {
-    seed: first.seed,
-    steps: first.steps,
-    cfg: first.cfg,
+    seed: first.seed !== null ? String(first.seed) : "0",
+    steps: first.steps ?? 0,
+    cfg: first.cfg ?? 0,
   };
 }
 
@@ -103,9 +102,11 @@ export function detectPngAlpha(filePath: string): boolean {
   try {
     const fd = openSync(filePath, "r");
     try {
-      const buf = Buffer.alloc(25);
-      const n = readSync(fd, buf, 0, 25, null);
-      if (n < 25) return false;
+      // Need 29 bytes: 8 (sig) + 4 (len) + 4 (type) + 13 (IHDR data)
+      // Color type is at byte 25 (0-indexed), which is the 26th byte
+      const buf = Buffer.alloc(29);
+      const n = readSync(fd, buf, 0, 29, null);
+      if (n < 29) return false;
 
       const PNG_SIG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
       if (!buf.subarray(0, 8).equals(PNG_SIG)) return false;
@@ -115,7 +116,8 @@ export function detectPngAlpha(filePath: string): boolean {
 
       if (buf.subarray(12, 16).toString("ascii") !== "IHDR") return false;
 
-      const colorType = buf[24];
+      // Color type is at byte 25 (16 + 9), after bit depth at byte 24
+      const colorType = buf[25];
       return (
         colorType === PNG_COLOR_TYPE_GRAYSCALE_ALPHA ||
         colorType === PNG_COLOR_TYPE_RGBA
@@ -144,8 +146,10 @@ export function extractImageMetadata(filePath: string): ExtractedImageMetadata {
     height: null as number | null,
   };
 
-  if (fileFormat === "png") {
-    rawChunks = extractPngTextChunks(filePath);
+  if (fileFormat === "PNG") {
+    const extractedChunks = extractPngTextChunks(filePath);
+    // Strip the 'type' field from chunks to match the interface
+    rawChunks = extractedChunks.map(({ keyword, text }) => ({ keyword, text }));
     comfyMetadata = parseComfyUIPngMetadata(filePath);
     const pngDims = readPngDimensions(filePath);
     if (pngDims) {
@@ -154,13 +158,13 @@ export function extractImageMetadata(filePath: string): ExtractedImageMetadata {
   }
 
   // Extract models, LoRAs, and sampler names from ComfyUI metadata
-  const models = comfyMetadata?.models ?? [];
-  const loras = comfyMetadata?.loras ?? [];
-  const samplers =
+  const extractedModels = comfyMetadata?.models ?? [];
+  const extractedLoras = comfyMetadata?.loras ?? [];
+  const extractedSamplers =
     comfyMetadata?.samplers
       .map((s) => s.samplerName)
       .filter((s): s is string => s !== null) ?? [];
-  const schedulers =
+  const extractedSchedulers =
     comfyMetadata?.samplers
       .map((s) => s.scheduler)
       .filter((s): s is string => s !== null) ?? [];
@@ -180,24 +184,26 @@ export function extractImageMetadata(filePath: string): ExtractedImageMetadata {
     cfg: cfgScale,
   } = extractFirstSampler(comfyMetadata?.samplers ?? []);
 
-  // Calculate aspect ratio
+  // Calculate aspect ratio classification
   const width = dimensions.width ?? comfyMetadata?.width ?? null;
   const height = dimensions.height ?? comfyMetadata?.height ?? null;
-  const aspectRatio = width && height && height !== 0 ? width / height : 1;
-  const aspectRatioClass = classifyAspectRatio(aspectRatio);
+  const aspectRatio: "portrait" | "landscape" | "square" | null =
+    width && height && height !== 0
+      ? classifyAspectRatio(width / height)
+      : null;
 
   // Detect alpha for PNG
-  const hasAlpha = fileFormat === "png" ? detectPngAlpha(filePath) : false;
+  const hasAlpha = fileFormat === "PNG" ? detectPngAlpha(filePath) : false;
 
-  // Color space from format
-  const colorSpace = fileFormat === "png" ? "sRGB" : "sRGB";
+  // Color space - not detected yet, always null
+  const colorSpace: string | null = null;
 
   return {
     rawChunks,
-    models,
-    loras,
-    samplers,
-    schedulers,
+    extractedModels,
+    extractedLoras,
+    extractedSamplers,
+    extractedSchedulers,
     positivePrompt,
     negativePrompt,
     steps,
@@ -206,7 +212,6 @@ export function extractImageMetadata(filePath: string): ExtractedImageMetadata {
     width,
     height,
     aspectRatio,
-    aspectRatioClass,
     fileSize: stats.size,
     fileFormat,
     colorSpace,
