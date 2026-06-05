@@ -24,10 +24,6 @@ function createTestDir(): string {
   return dir;
 }
 
-function cleanupTestDir(dir: string): void {
-  rmSync(dir, { recursive: true, force: true });
-}
-
 // Mock the db module with a factory that returns our test db client
 vi.mock("../db", () => ({
   db: vi.fn(),
