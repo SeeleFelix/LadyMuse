@@ -15,9 +15,14 @@
   let { store, allTags = [] }: { store: GalleryStore; allTags?: Tag[] } =
     $props();
 
-  type ZoomMode = "fit" | "100";
-
-  let zoomMode = $state<ZoomMode>("fit");
+  let zoom = $state(1);
+  let panX = $state(0);
+  let panY = $state(0);
+  let dragging = $state(false);
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let panStartX = 0;
+  let panStartY = 0;
 
   // Current image index for navigation
   let currentIndex = $derived(
@@ -48,11 +53,67 @@
     }
   }
 
+  function handleWheel(e: WheelEvent) {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    zoom = Math.max(0.1, Math.min(10, zoom + delta));
+  }
+
+  function fitToScreen() {
+    zoom = 1;
+    panX = 0;
+    panY = 0;
+  }
+
+  function actualSize() {
+    zoom = 1;
+    panX = 0;
+    panY = 0;
+  }
+
+  function handleDragStart(e: MouseEvent) {
+    if (zoom <= 1) return;
+    dragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    panStartX = panX;
+    panStartY = panY;
+  }
+
+  function handleDragMove(e: MouseEvent) {
+    if (!dragging) return;
+    panX = panStartX + (e.clientX - dragStartX);
+    panY = panStartY + (e.clientY - dragStartY);
+  }
+
+  function handleDragEnd() {
+    dragging = false;
+  }
+
+  function handleDblClickImage() {
+    zoom = zoom === 1 ? 2 : 1;
+    if (zoom === 1) {
+      panX = 0;
+      panY = 0;
+    }
+  }
+
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === "ArrowLeft") navigatePrev();
     else if (e.key === "ArrowRight") navigateNext();
     else if (e.key === "Escape") store.setViewMode("library");
+    else if (e.key === "0") fitToScreen();
+    else if (e.key === "1") actualSize();
   }
+
+  // Reset zoom when image changes
+  $effect(() => {
+    if (store.activeImage) {
+      zoom = 1;
+      panX = 0;
+      panY = 0;
+    }
+  });
 
   // Keyboard navigation
   $effect(() => {
@@ -101,21 +162,25 @@
         <!-- Zoom controls -->
         <div class="flex items-center gap-1">
           <button
-            onclick={() => (zoomMode = "fit")}
-            class="text-xs px-2 py-1 rounded {zoomMode === 'fit'
-              ? 'bg-violet-500/20 text-violet-300'
-              : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'}"
+            onclick={fitToScreen}
+            class="text-xs px-2 py-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+            >适应</button
           >
-            适应
-          </button>
+          <span class="text-xs text-zinc-600">{Math.round(zoom * 100)}%</span>
           <button
-            onclick={() => (zoomMode = "100")}
-            class="text-xs px-2 py-1 rounded {zoomMode === '100'
-              ? 'bg-violet-500/20 text-violet-300'
-              : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'}"
+            onclick={() => {
+              zoom = Math.min(10, zoom + 0.5);
+            }}
+            class="text-xs px-2 py-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+            >+</button
           >
-            100%
-          </button>
+          <button
+            onclick={() => {
+              zoom = Math.max(0.1, zoom - 0.5);
+            }}
+            class="text-xs px-2 py-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+            >&minus;</button
+          >
         </div>
 
         <!-- Navigation -->
@@ -166,15 +231,25 @@
       </div>
 
       <!-- Preview image -->
-      <div class="flex-1 flex items-center justify-center overflow-hidden p-4">
+      <div
+        class="flex-1 flex items-center justify-center overflow-hidden p-4"
+        onwheel={handleWheel}
+        onmousedown={handleDragStart}
+        onmousemove={handleDragMove}
+        onmouseup={handleDragEnd}
+        onmouseleave={handleDragEnd}
+        class:cursor-grab={zoom > 1 && !dragging}
+        class:cursor-grabbing={dragging}
+      >
         {#if store.activeImage && !store.activeImage.isMissing}
           <img
             src={getImageUrl(store.activeImage)}
             alt=""
-            class="max-w-full max-h-full"
-            class:object-contain={zoomMode === "fit"}
-            class:object-none={zoomMode === "100"}
+            class="max-w-full max-h-full object-contain select-none"
+            style="transform: scale({zoom}) translate({panX / zoom}px, {panY /
+              zoom}px)"
             draggable="false"
+            ondblclick={handleDblClickImage}
           />
         {:else if store.activeImage?.isMissing}
           <div class="text-center">

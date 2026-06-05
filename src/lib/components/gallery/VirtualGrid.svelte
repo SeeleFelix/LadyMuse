@@ -44,6 +44,17 @@
 
     return () => observer?.disconnect();
   });
+
+  // Re-trigger observer after loading completes (handles edge case where
+  // sentinel stays visible after new images are appended)
+  $effect(() => {
+    if (!loadingMore && hasMore && observer && sentinelEl) {
+      observer.unobserve(sentinelEl);
+      requestAnimationFrame(() => {
+        if (sentinelEl) observer?.observe(sentinelEl);
+      });
+    }
+  });
 </script>
 
 <div
