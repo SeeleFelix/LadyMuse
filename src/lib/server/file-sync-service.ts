@@ -67,7 +67,7 @@ export class FileSyncService {
 
     // Run initial reconciliation
     this.reconcileOnStartup().catch((err) => {
-      console.error("[FileSyncService] reconcile error:", err);
+      console.error("[FileSyncService] startup reconcile failed:", err);
     });
   }
 
@@ -114,10 +114,15 @@ export class FileSyncService {
 
   /**
    * Broadcast an event to all subscribers.
+   * Subscriber errors are isolated so one failing subscriber doesn't affect others.
    */
   broadcast(event: FileEvent): void {
     for (const sub of this.subscribers) {
-      sub(event);
+      try {
+        sub(event);
+      } catch {
+        // Subscriber errors should not affect other subscribers
+      }
     }
   }
 
@@ -312,22 +317,25 @@ export class FileSyncService {
   }
 }
 
-// Singleton instance
-let instance: FileSyncService | null = null;
+// Singleton promise - ensures concurrent calls share the same instance
+let instancePromise: Promise<FileSyncService | null> | null = null;
 
 /**
  * Get or create the singleton FileSyncService instance.
+ * Uses promise-based singleton pattern to prevent race conditions.
  */
 export async function getFileSyncService(
   options?: FileSyncServiceOptions,
 ): Promise<FileSyncService | null> {
-  if (instance) return instance;
+  if (instancePromise) return instancePromise;
 
-  const outputDir = await getOutputDir();
-  if (!outputDir) return null;
+  instancePromise = (async () => {
+    const outputDir = await getOutputDir();
+    if (!outputDir) return null;
+    return new FileSyncService(outputDir, options);
+  })();
 
-  instance = new FileSyncService(outputDir, options);
-  return instance;
+  return instancePromise;
 }
 
 /**
@@ -335,5 +343,7 @@ export async function getFileSyncService(
  * Used by the delete endpoint to notify clients of file deletions.
  */
 export function broadcastDeletion(path: string): void {
-  instance?.broadcast({ type: "delete", path });
+  instancePromise?.then((instance) => {
+    instance?.broadcast({ type: "delete", path });
+  });
 }
