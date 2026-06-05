@@ -1,120 +1,64 @@
 <script lang="ts">
-  let {
-    images = [],
-    onclose,
-  }: {
-    images: { relativePath: string; filename: string; modifiedAt?: string }[];
-    onclose: () => void;
-  } = $props();
+  import DetailPanel from "./DetailPanel.svelte";
+  import type { GalleryStore, ImageResult } from "$lib/stores/gallery-store";
 
-  let scale = $state(1);
-  let translateX = $state(0);
-  let translateY = $state(0);
-  let isDragging = $state(false);
-  let didDrag = $state(false);
-  let dragStart = { x: 0, y: 0 };
-  let mainEl: HTMLDivElement | undefined = $state();
+  let { store }: { store: GalleryStore } = $props();
 
-  const MIN_SCALE = 0.1;
-  const MAX_SCALE = 10;
+  let allTags = $state<{ id: number; name: string; slug: string }[]>([]);
+  let leftDetailImage = $state<ImageResult | null>(null);
+  let rightDetailImage = $state<ImageResult | null>(null);
+  let gridDetailImage = $state<ImageResult | null>(null);
 
-  function resetTransform() {
-    scale = 1;
-    translateX = 0;
-    translateY = 0;
+  // Get selected images (limit to 4)
+  let selectedImages = $derived(
+    store.images
+      .filter((img) => store.selectedPaths.has(img.relativePath))
+      .slice(0, 4),
+  );
+
+  let selectionCount = $derived(selectedImages.length);
+  let isTwoImageMode = $derived(selectionCount === 2);
+
+  function getImageUrl(image: ImageResult): string {
+    return `/api/comfyui/image/${encodeURIComponent(image.relativePath)}`;
   }
 
-  function handleWheel(e: WheelEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    const delta = e.deltaY > 0 ? -0.15 : 0.15;
-    scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale + delta * scale));
-    if (scale <= 1) {
-      translateX = 0;
-      translateY = 0;
+  function handleImageClick(image: ImageResult, side?: "left" | "right") {
+    if (isTwoImageMode) {
+      if (side === "left") leftDetailImage = image;
+      else if (side === "right") rightDetailImage = image;
+    } else {
+      gridDetailImage = image;
     }
   }
 
-  function handleMouseDown(e: MouseEvent) {
-    if (scale > 1) {
-      isDragging = true;
-      didDrag = false;
-      dragStart = { x: e.clientX - translateX, y: e.clientY - translateY };
-    }
+  function handleCloseDetail(side?: "left" | "right") {
+    if (side === "left") leftDetailImage = null;
+    else if (side === "right") rightDetailImage = null;
+    else gridDetailImage = null;
   }
 
-  function handleMouseMove(e: MouseEvent) {
-    if (isDragging && scale > 1) {
-      const nx = e.clientX - dragStart.x;
-      const ny = e.clientY - dragStart.y;
-      if (Math.abs(nx - translateX) > 2 || Math.abs(ny - translateY) > 2)
-        didDrag = true;
-      translateX = nx;
-      translateY = ny;
-    }
+  function handleBack() {
+    store.setViewMode("library");
   }
 
-  function handleMouseUp() {
-    isDragging = false;
+  function handleUpdate(path: string, updates: Record<string, unknown>) {
+    store.updateAttributes(path, updates);
   }
-
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape") onclose();
-    else if (e.key === "+" || e.key === "=")
-      scale = Math.min(MAX_SCALE, scale * 1.2);
-    else if (e.key === "-") scale = Math.max(MIN_SCALE, scale / 1.2);
-    else if (e.key === "0") resetTransform();
-  }
-
-  function getImageUrl(relativePath: string, modifiedAt?: string): string {
-    const base = `/api/comfyui/images/${encodeURIComponent(relativePath)}`;
-    return modifiedAt ? `${base}?t=${new Date(modifiedAt).getTime()}` : base;
-  }
-
-  $effect(() => {
-    resetTransform();
-  });
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
-
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div
-  class="fixed inset-0 z-50 bg-black/95 flex flex-col select-none"
-  bind:this={mainEl}
-  onwheel={handleWheel}
-  onmousedown={handleMouseDown}
-  onmousemove={handleMouseMove}
-  onmouseup={handleMouseUp}
-  onmouseleave={handleMouseUp}
-  role="dialog"
->
+<div class="flex flex-col h-full bg-zinc-950">
   <!-- Toolbar -->
-  <div class="flex items-center justify-between px-4 py-2 bg-black/50 shrink-0">
-    <div class="text-sm text-zinc-300">对比视图 ({images.length} 张)</div>
-    <div class="flex items-center gap-3">
-      <span class="text-xs text-zinc-500">{Math.round(scale * 100)}%</span>
+  <div
+    class="flex items-center justify-between px-4 py-2 border-b border-zinc-800"
+  >
+    <div class="flex items-center gap-2">
       <button
-        onclick={() => (scale = Math.max(MIN_SCALE, scale / 1.5))}
-        class="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-zinc-800"
-        >-</button
-      >
-      <button
-        onclick={resetTransform}
-        class="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-zinc-800"
-        >适应</button
-      >
-      <button
-        onclick={() => (scale = Math.min(MAX_SCALE, scale * 1.5))}
-        class="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-zinc-800"
-        >+</button
-      >
-      <button
-        onclick={onclose}
-        class="text-zinc-400 hover:text-white p-1 rounded hover:bg-zinc-800"
+        onclick={handleBack}
+        class="text-zinc-400 hover:text-zinc-200 text-xs px-2 py-1 rounded hover:bg-zinc-800 flex items-center gap-1"
       >
         <svg
-          class="w-5 h-5"
+          class="w-3.5 h-3.5"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -123,35 +67,199 @@
             stroke-linecap="round"
             stroke-linejoin="round"
             stroke-width="2"
-            d="M6 18L18 6M6 6l12 12"
+            d="M15 19l-7-7 7-7"
           />
         </svg>
+        返回
       </button>
+      <span class="text-xs text-zinc-500">
+        对比视图 ({selectionCount} 张)
+      </span>
+    </div>
+
+    <div class="text-xs text-zinc-600">
+      {selectionCount < 2
+        ? "请选择 2-4 张图片"
+        : selectionCount > 4
+          ? "最多支持 4 张"
+          : ""}
     </div>
   </div>
 
-  <!-- Images: equal containers, images fill with object-cover so same visual size -->
+  <!-- Main content -->
   <div class="flex-1 flex min-h-0">
-    {#each images as img, i}
-      <div
-        class="flex-1 overflow-hidden border-r border-zinc-800 last:border-r-0 relative flex items-center justify-center"
-      >
-        <div
-          class="absolute top-2 left-2 text-xs text-zinc-500 bg-black/60 px-2 py-0.5 rounded z-10"
-        >
-          {img.filename}
+    {#if selectionCount < 2}
+      <!-- Not enough images selected -->
+      <div class="flex-1 flex items-center justify-center">
+        <div class="text-center">
+          <svg
+            class="w-12 h-12 text-zinc-600 mx-auto mb-3"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+            />
+          </svg>
+          <p class="text-sm text-zinc-600">请选择 2-4 张图片进行对比</p>
+          <p class="text-xs text-zinc-700 mt-1">按住 Shift 或 Ctrl 点击多选</p>
         </div>
-        <img
-          src={getImageUrl(img.relativePath, img.modifiedAt)}
-          alt=""
-          class="w-full h-full object-contain select-none"
-          style="transform: scale({scale}) translate({translateX /
-            scale}px, {translateY / scale}px); transition: {isDragging
-            ? 'none'
-            : 'transform 0.2s ease'};"
-          draggable="false"
-        />
       </div>
-    {/each}
+    {:else if isTwoImageMode}
+      <!-- 2-image mode: DetA | ImageA | ImageB | DetB -->
+      <div class="flex-1 flex">
+        <!-- Left detail panel -->
+        <div class="w-64 shrink-0 border-r border-zinc-800">
+          {#if leftDetailImage}
+            <DetailPanel
+              image={leftDetailImage}
+              {allTags}
+              onrate={(r) =>
+                handleUpdate(leftDetailImage!.relativePath, { rating: r })}
+              oncolor={(c) =>
+                handleUpdate(leftDetailImage!.relativePath, { colorLabel: c })}
+              onflag={(f) =>
+                handleUpdate(leftDetailImage!.relativePath, { flag: f })}
+              onaddtag={(t) => {
+                /* TODO */
+              }}
+              onremovetag={(id) => {
+                /* TODO */
+              }}
+              onclose={() => handleCloseDetail("left")}
+            />
+          {:else}
+            <div
+              class="h-full flex items-center justify-center text-zinc-600 text-xs"
+            >
+              点击左侧图片查看详情
+            </div>
+          {/if}
+        </div>
+
+        <!-- Images (center) -->
+        <div class="flex-1 flex bg-zinc-900/30">
+          {#each selectedImages as image, i}
+            <div
+              class="flex-1 flex items-center justify-center p-4 overflow-hidden {i ===
+              0
+                ? 'border-r border-zinc-800'
+                : ''}"
+            >
+              <button
+                onclick={() =>
+                  handleImageClick(image, i === 0 ? "left" : "right")}
+                class="relative max-w-full max-h-full transition-transform hover:scale-[1.02]"
+              >
+                <img
+                  src={getImageUrl(image)}
+                  alt={image.relativePath}
+                  class="max-w-full max-h-full object-contain"
+                  draggable="false"
+                />
+                <div
+                  class="absolute bottom-0 left-0 right-0 bg-black/60 text-xs text-zinc-300 px-2 py-1 truncate"
+                >
+                  {image.relativePath.split("/").pop()}
+                </div>
+              </button>
+            </div>
+          {/each}
+        </div>
+
+        <!-- Right detail panel -->
+        <div class="w-64 shrink-0 border-l border-zinc-800">
+          {#if rightDetailImage}
+            <DetailPanel
+              image={rightDetailImage}
+              {allTags}
+              onrate={(r) =>
+                handleUpdate(rightDetailImage!.relativePath, { rating: r })}
+              oncolor={(c) =>
+                handleUpdate(rightDetailImage!.relativePath, { colorLabel: c })}
+              onflag={(f) =>
+                handleUpdate(rightDetailImage!.relativePath, { flag: f })}
+              onaddtag={(t) => {
+                /* TODO */
+              }}
+              onremovetag={(id) => {
+                /* TODO */
+              }}
+              onclose={() => handleCloseDetail("right")}
+            />
+          {:else}
+            <div
+              class="h-full flex items-center justify-center text-zinc-600 text-xs"
+            >
+              点击右侧图片查看详情
+            </div>
+          {/if}
+        </div>
+      </div>
+    {:else}
+      <!-- 3-4 image mode: Grid (2x2) | Detail -->
+      <div class="flex-1 flex">
+        <!-- Grid -->
+        <div class="flex-1 bg-zinc-900/30 p-4">
+          <div class="grid grid-cols-2 gap-4 h-full">
+            {#each selectedImages as image}
+              <div
+                class="flex items-center justify-center border border-zinc-800 rounded overflow-hidden"
+              >
+                <button
+                  onclick={() => handleImageClick(image)}
+                  class="relative max-w-full max-h-full transition-transform hover:scale-[1.02]"
+                >
+                  <img
+                    src={getImageUrl(image)}
+                    alt={image.relativePath}
+                    class="max-w-full max-h-full object-contain"
+                    draggable="false"
+                  />
+                  <div
+                    class="absolute bottom-0 left-0 right-0 bg-black/60 text-xs text-zinc-300 px-2 py-1 truncate"
+                  >
+                    {image.relativePath.split("/").pop()}
+                  </div>
+                </button>
+              </div>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Single detail panel -->
+        <div class="w-64 shrink-0 border-l border-zinc-800">
+          {#if gridDetailImage}
+            <DetailPanel
+              image={gridDetailImage}
+              {allTags}
+              onrate={(r) =>
+                handleUpdate(gridDetailImage!.relativePath, { rating: r })}
+              oncolor={(c) =>
+                handleUpdate(gridDetailImage!.relativePath, { colorLabel: c })}
+              onflag={(f) =>
+                handleUpdate(gridDetailImage!.relativePath, { flag: f })}
+              onaddtag={(t) => {
+                /* TODO */
+              }}
+              onremovetag={(id) => {
+                /* TODO */
+              }}
+              onclose={() => handleCloseDetail()}
+            />
+          {:else}
+            <div
+              class="h-full flex items-center justify-center text-zinc-600 text-xs p-4 text-center"
+            >
+              点击图片查看详情
+            </div>
+          {/if}
+        </div>
+      </div>
+    {/if}
   </div>
 </div>
