@@ -11,5 +11,3 @@ masterpiece, best quality, @artist_name. Natural language description continues 
 - 最后补充风格媒介和品质约束
 
 至少 2 句完整句子。可以包含质感/材质词增强效果。
-
-- (keyword:weight) 权重可用，权重值范围 2-5，效果弱时推到 4-5（如 `(chibi:2)`、`(blue eyes:4)`）
