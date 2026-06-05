@@ -1,5 +1,4 @@
 import { untrack } from "svelte";
-import { SvelteSet } from "svelte/reactivity";
 
 // Client-side types (mirroring server types for gallery queries)
 // These are duplicated from $lib/server/gallery-query-types.ts
@@ -175,7 +174,8 @@ export function createGalleryStore(api: {
 }) {
   // Core reactive state
   let images = $state<ImageResult[]>([]);
-  let selectedPaths: Set<string> = new SvelteSet();
+  let _selectedPaths = $state<string[]>([]);
+  let selectedPaths = $derived(new Set(_selectedPaths));
   let activeImage = $state<ImageResult | null>(null);
   let filters = $state<FilterCriteria>({});
   let sortOrder = $state<SortOption>({
@@ -197,6 +197,17 @@ export function createGalleryStore(api: {
 
   // Selection anchor state (non-reactive)
   let selectionState: SelectionState = { anchorPath: null, anchorIndex: -1 };
+
+  function _addSelection(path: string) {
+    if (!_selectedPaths.includes(path))
+      _selectedPaths = [..._selectedPaths, path];
+  }
+  function _removeSelection(path: string) {
+    _selectedPaths = _selectedPaths.filter((p) => p !== path);
+  }
+  function _clearSelection() {
+    _selectedPaths = [];
+  }
 
   // Derived state
   let selectedCount = $derived(selectedPaths.size);
@@ -264,7 +275,7 @@ export function createGalleryStore(api: {
       hasMore: false,
       hasLess: false,
     };
-    selectedPaths.clear();
+    _clearSelection();
     activeImage = null;
     selectionState = { anchorPath: null, anchorIndex: -1 };
     loadPage();
@@ -301,27 +312,27 @@ export function createGalleryStore(api: {
       // Range selection: select all images between anchor and current
       const start = Math.min(selectionState.anchorIndex, currentIndex);
       const end = Math.max(selectionState.anchorIndex, currentIndex);
-      selectedPaths.clear();
+      _clearSelection();
       for (let i = start; i <= end; i++) {
-        selectedPaths.add(images[i].relativePath);
+        _addSelection(images[i].relativePath);
       }
     } else if (multi) {
       // Toggle selection for multi-select without modifier
       if (selectedPaths.has(path)) {
-        selectedPaths.delete(path);
+        _removeSelection(path);
         if (selectionState.anchorPath === path) {
           selectionState.anchorPath = null;
           selectionState.anchorIndex = -1;
         }
       } else {
-        selectedPaths.add(path);
+        _addSelection(path);
         selectionState.anchorPath = path;
         selectionState.anchorIndex = currentIndex;
       }
     } else {
       // Single selection
-      selectedPaths.clear();
-      selectedPaths.add(path);
+      _clearSelection();
+      _addSelection(path);
       selectionState.anchorPath = path;
       selectionState.anchorIndex = currentIndex >= 0 ? currentIndex : -1;
     }
@@ -335,7 +346,7 @@ export function createGalleryStore(api: {
    */
   function selectAll() {
     for (const img of images) {
-      selectedPaths.add(img.relativePath);
+      _addSelection(img.relativePath);
     }
     if (images.length > 0) {
       selectionState.anchorPath = images[0].relativePath;
@@ -347,7 +358,7 @@ export function createGalleryStore(api: {
    * Clear all selections
    */
   function deselectAll() {
-    selectedPaths.clear();
+    _clearSelection();
     activeImage = null;
     selectionState = { anchorPath: null, anchorIndex: -1 };
   }
@@ -399,7 +410,7 @@ export function createGalleryStore(api: {
       untrack(() => loadPage());
     } else if (event.type === "delete") {
       images = images.filter((img) => img.relativePath !== event.path);
-      selectedPaths.delete(event.path);
+      _removeSelection(event.path);
       if (activeImage?.relativePath === event.path) {
         activeImage = images[0] ?? null;
       }
