@@ -175,7 +175,7 @@ export function createGalleryStore(api: {
 }) {
   // Core reactive state
   let images = $state<ImageResult[]>([]);
-  let selectedPaths = $state<Set<string>>(new SvelteSet());
+  let selectedPaths: Set<string> = new SvelteSet();
   let activeImage = $state<ImageResult | null>(null);
   let filters = $state<FilterCriteria>({});
   let sortOrder = $state<SortOption>({
