@@ -8,6 +8,9 @@ import {
   readPngDimensions,
   PNG_SIG,
 } from "./png-metadata";
+import { db } from "./db";
+import { imageAttributes } from "./db/schema";
+import { eq } from "drizzle-orm";
 
 // PNG color type values from IHDR
 const PNG_COLOR_TYPE_GRAYSCALE = 0;
@@ -219,4 +222,71 @@ export function extractImageMetadata(filePath: string): ExtractedImageMetadata {
     fileModifiedAt: stats.mtime.toISOString(),
     metadataJson: comfyMetadata?.rawPromptJson ?? null,
   };
+}
+
+/**
+ * Upsert image metadata to the database with mtime-based change detection.
+ * - Skips update if record exists and fileModifiedAt matches (no change needed).
+ * - Updates existing record if mtime changed.
+ * - Inserts new record if none exists.
+ * - Always sets isMissing = false (file is confirmed to exist).
+ */
+export async function upsertImageMetadata(
+  relativePath: string,
+  absolutePath: string,
+): Promise<void> {
+  // Extract current metadata from the image file
+  const meta = extractImageMetadata(absolutePath);
+
+  // Check if a record already exists for this relative path
+  const existing = await db
+    .select({
+      fileModifiedAt: imageAttributes.fileModifiedAt,
+    })
+    .from(imageAttributes)
+    .where(eq(imageAttributes.relativePath, relativePath))
+    .get();
+
+  // If record exists and mtime matches, skip the update (no change needed)
+  if (existing && existing.fileModifiedAt === meta.fileModifiedAt) {
+    return;
+  }
+
+  // Prepare the data to write
+  const data = {
+    extractedModels: JSON.stringify(meta.extractedModels),
+    extractedLoras: JSON.stringify(meta.extractedLoras),
+    extractedSamplers: JSON.stringify(meta.extractedSamplers),
+    extractedSchedulers: JSON.stringify(meta.extractedSchedulers),
+    positivePrompt: meta.positivePrompt,
+    negativePrompt: meta.negativePrompt,
+    steps: meta.steps,
+    cfgScale: meta.cfgScale,
+    seed: meta.seed,
+    width: meta.width,
+    height: meta.height,
+    aspectRatio: meta.aspectRatio,
+    fileSize: meta.fileSize,
+    fileFormat: meta.fileFormat,
+    colorSpace: meta.colorSpace,
+    hasAlpha: meta.hasAlpha,
+    fileModifiedAt: meta.fileModifiedAt,
+    isMissing: false,
+    metadataJson: meta.metadataJson,
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (existing) {
+    // Record exists but mtime changed -> UPDATE
+    await db
+      .update(imageAttributes)
+      .set(data)
+      .where(eq(imageAttributes.relativePath, relativePath));
+  } else {
+    // No record exists -> INSERT
+    await db.insert(imageAttributes).values({
+      relativePath,
+      ...data,
+    });
+  }
 }
