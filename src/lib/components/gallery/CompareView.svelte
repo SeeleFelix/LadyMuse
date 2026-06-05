@@ -18,6 +18,16 @@
   let rightDetailImage = $state<ImageResult | null>(null);
   let gridDetailImage = $state<ImageResult | null>(null);
 
+  // Zoom state
+  let zoom = $state(1);
+  let panX = $state(0);
+  let panY = $state(0);
+  let dragging = $state(false);
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let panStartX = 0;
+  let panStartY = 0;
+
   // Get selected images (limit to 4)
   let selectedImages = $derived(
     store.images
@@ -54,6 +64,45 @@
   function handleUpdate(path: string, updates: Record<string, unknown>) {
     store.updateAttributes(path, updates);
   }
+
+  function handleWheel(e: WheelEvent) {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    zoom = Math.max(0.1, Math.min(10, zoom + delta));
+  }
+
+  function fitToScreen() {
+    zoom = 1;
+    panX = 0;
+    panY = 0;
+  }
+
+  function handleDragStart(e: MouseEvent) {
+    if (zoom <= 1) return;
+    dragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    panStartX = panX;
+    panStartY = panY;
+  }
+
+  function handleDragMove(e: MouseEvent) {
+    if (!dragging) return;
+    panX = panStartX + (e.clientX - dragStartX);
+    panY = panStartY + (e.clientY - dragStartY);
+  }
+
+  function handleDragEnd() {
+    dragging = false;
+  }
+
+  function handleDblClickImage() {
+    zoom = zoom === 1 ? 2 : 1;
+    if (zoom === 1) {
+      panX = 0;
+      panY = 0;
+    }
+  }
 </script>
 
 <div class="flex flex-col h-full bg-zinc-950">
@@ -86,12 +135,27 @@
       </span>
     </div>
 
-    <div class="text-xs text-zinc-600">
-      {selectionCount < 2
-        ? "请选择 2-4 张图片"
-        : selectionCount > 4
-          ? "最多支持 4 张"
-          : ""}
+    <div class="flex items-center gap-1">
+      <button
+        onclick={fitToScreen}
+        class="text-xs px-2 py-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+        >适应</button
+      >
+      <span class="text-xs text-zinc-600">{Math.round(zoom * 100)}%</span>
+      <button
+        onclick={() => {
+          zoom = Math.min(10, zoom + 0.5);
+        }}
+        class="text-xs px-2 py-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+        >+</button
+      >
+      <button
+        onclick={() => {
+          zoom = Math.max(0.1, zoom - 0.5);
+        }}
+        class="text-xs px-2 py-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+        >&minus;</button
+      >
     </div>
   </div>
 
@@ -151,7 +215,14 @@
         </div>
 
         <!-- Images (center) -->
-        <div class="flex-1 flex bg-zinc-900/30">
+        <div
+          class="flex-1 flex bg-zinc-900/30"
+          onwheel={handleWheel}
+          onmousedown={handleDragStart}
+          onmousemove={handleDragMove}
+          onmouseup={handleDragEnd}
+          onmouseleave={handleDragEnd}
+        >
           {#each selectedImages as image, i}
             <div
               class="flex-1 flex items-center justify-center p-4 overflow-hidden {i ===
@@ -162,12 +233,15 @@
               <button
                 onclick={() =>
                   handleImageClick(image, i === 0 ? "left" : "right")}
-                class="relative max-w-full max-h-full transition-transform hover:scale-[1.02]"
+                class="relative max-w-full max-h-full"
+                style="transform: scale({zoom}) translate({panX /
+                  zoom}px, {panY / zoom}px)"
+                ondblclick={handleDblClickImage}
               >
                 <img
                   src={getImageUrl(image)}
                   alt={image.relativePath}
-                  class="max-w-full max-h-full object-contain"
+                  class="max-w-full max-h-full object-contain select-none"
                   draggable="false"
                 />
                 <div
@@ -213,7 +287,14 @@
       <!-- 3-4 image mode: Grid (2x2) | Detail -->
       <div class="flex-1 flex">
         <!-- Grid -->
-        <div class="flex-1 bg-zinc-900/30 p-4">
+        <div
+          class="flex-1 bg-zinc-900/30 p-4"
+          onwheel={handleWheel}
+          onmousedown={handleDragStart}
+          onmousemove={handleDragMove}
+          onmouseup={handleDragEnd}
+          onmouseleave={handleDragEnd}
+        >
           <div class="grid grid-cols-2 gap-4 h-full">
             {#each selectedImages as image}
               <div
@@ -221,12 +302,15 @@
               >
                 <button
                   onclick={() => handleImageClick(image)}
-                  class="relative max-w-full max-h-full transition-transform hover:scale-[1.02]"
+                  class="relative max-w-full max-h-full"
+                  style="transform: scale({zoom}) translate({panX /
+                    zoom}px, {panY / zoom}px)"
+                  ondblclick={handleDblClickImage}
                 >
                   <img
                     src={getImageUrl(image)}
                     alt={image.relativePath}
-                    class="max-w-full max-h-full object-contain"
+                    class="max-w-full max-h-full object-contain select-none"
                     draggable="false"
                   />
                   <div
