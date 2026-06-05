@@ -3,10 +3,8 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as schema from "./schema";
 import * as sqliteVec from "sqlite-vec";
 import path from "path";
-import { fileURLToPath } from "url";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = path.resolve(__dirname, "../../../../ladymuse.db");
+const dbPath = path.resolve(process.cwd(), "ladymuse.db");
 
 const sqlite = new Database(dbPath);
 sqlite.pragma("journal_mode = WAL");
