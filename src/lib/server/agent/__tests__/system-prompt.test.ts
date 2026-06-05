@@ -62,12 +62,12 @@ describe("Anima style guidance files", () => {
     expect(tagsFile).toContain("没有 75 token 限制");
   });
 
-  it("loads anima natural guidance that supports weight syntax", () => {
+  it("loads anima natural guidance with NL format instructions", () => {
     const naturalFile = readFileSync(
       join(stylesDir, "anima", "natural.md"),
       "utf-8",
     );
-    expect(naturalFile).toContain("(keyword:weight)");
+    expect(naturalFile).toContain("自然语言");
     expect(naturalFile).not.toContain("不要使用权重语法");
   });
 });
