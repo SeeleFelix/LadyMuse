@@ -1,24 +1,29 @@
 import type { RequestHandler } from "./$types";
-import { subscribe } from "$lib/server/comfyui-watcher";
+import { getFileSyncService } from "$lib/server/file-sync-service";
 
 export const GET: RequestHandler = async ({ request }) => {
+  const service = await getFileSyncService();
+  if (!service) {
+    return new Response("ComfyUI output directory not configured", {
+      status: 503,
+    });
+  }
+
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder();
 
-      const send = (path: string) => {
+      const send = (event: { type: string; path: string }) => {
         try {
           controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ type: "new", path })}\n\n`,
-            ),
+            encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
           );
         } catch {
           unsubscribe();
         }
       };
 
-      const unsubscribe = subscribe(send);
+      const unsubscribe = service.subscribe(send);
 
       const heartbeat = setInterval(() => {
         try {
