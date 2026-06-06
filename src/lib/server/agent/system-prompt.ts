@@ -3,6 +3,47 @@ import { join } from "path";
 import { getConfig } from "../config";
 import { getModelProfile, getDefaultProfile } from "./model-profiles";
 import { buildKnowledgeDirectory } from "../knowledge/directory";
+import defaultModulesJson from "./prompts/modules.json";
+import mod00 from "./prompts/00-persona.md?raw";
+import mod01 from "./prompts/01-creative-methodology.md?raw";
+import mod02 from "./prompts/02-civitai-guidance.md?raw";
+import mod03 from "./prompts/03-light-methodology.md?raw";
+import mod04 from "./prompts/04-composition-methodology.md?raw";
+import mod05 from "./prompts/05-color-methodology.md?raw";
+import mod06 from "./prompts/06-camera-methodology.md?raw";
+import mod07 from "./prompts/07-texture-methodology.md?raw";
+import mod08 from "./prompts/08-danbooru-guidance.md?raw";
+import modAnima from "./prompts/anima.md?raw";
+import modIllustrious from "./prompts/illustrious.md?raw";
+import modInteractive from "./prompts/interactive-persona.md?raw";
+import modZit from "./prompts/zit.md?raw";
+import styleAnimaHybrid from "./prompts/styles/anima/hybrid.md?raw";
+import styleAnimaNatural from "./prompts/styles/anima/natural.md?raw";
+import styleAnimaTags from "./prompts/styles/anima/tags.md?raw";
+
+const promptFiles: Record<string, string> = {
+  "00-persona.md": mod00,
+  "01-creative-methodology.md": mod01,
+  "02-civitai-guidance.md": mod02,
+  "03-light-methodology.md": mod03,
+  "04-composition-methodology.md": mod04,
+  "05-color-methodology.md": mod05,
+  "06-camera-methodology.md": mod06,
+  "07-texture-methodology.md": mod07,
+  "08-danbooru-guidance.md": mod08,
+  "anima.md": modAnima,
+  "illustrious.md": modIllustrious,
+  "interactive-persona.md": modInteractive,
+  "zit.md": modZit,
+  "styles/anima/hybrid.md": styleAnimaHybrid,
+  "styles/anima/natural.md": styleAnimaNatural,
+  "styles/anima/tags.md": styleAnimaTags,
+};
+
+function readPromptFile(relativePath: string): string {
+  if (relativePath in promptFiles) return promptFiles[relativePath];
+  throw new Error(`Prompt file not found: ${relativePath}`);
+}
 
 interface ModuleConfig {
   file: string;
@@ -15,15 +56,11 @@ interface PromptConfig {
   model_modules: Record<string, ModuleConfig>;
 }
 
-const DEFAULT_PATH = join(import.meta.dirname, "prompts", "modules.json");
-
 function readDefaults(): PromptConfig {
-  return JSON.parse(readFileSync(DEFAULT_PATH, "utf-8"));
+  return defaultModulesJson;
 }
 
 async function loadPromptModules(targetModelId: string): Promise<string> {
-  const dir = join(import.meta.dirname, "prompts");
-
   // File defaults are the source of truth for which modules exist.
   // DB config only overrides enabled/disabled for modules it knows about;
   // new modules added to the file automatically appear in all environments.
@@ -52,13 +89,13 @@ async function loadPromptModules(targetModelId: string): Promise<string> {
       }
       return true;
     })
-    .map((m) => readFileSync(join(dir, m.file), "utf-8"))
+    .map((m) => readPromptFile(m.file))
     .join("\n\n");
 
   const modelModule = defaults.model_modules[targetModelId];
   const modelPart =
     modelModule && modelModule.enabled
-      ? "\n\n" + readFileSync(join(dir, modelModule.file), "utf-8")
+      ? "\n\n" + readPromptFile(modelModule.file)
       : "";
 
   return shared + modelPart;
@@ -71,15 +108,8 @@ const STYLE_GUIDANCE: Record<string, string> = {
 };
 
 function loadStyleGuidance(modelId: string, promptStyle: string): string {
-  const styleFile = join(
-    import.meta.dirname,
-    "prompts",
-    "styles",
-    modelId,
-    `${promptStyle}.md`,
-  );
   try {
-    return readFileSync(styleFile, "utf-8");
+    return readPromptFile(`styles/${modelId}/${promptStyle}.md`);
   } catch {
     return STYLE_GUIDANCE[promptStyle] ?? STYLE_GUIDANCE.hybrid;
   }

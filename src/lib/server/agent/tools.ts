@@ -1,8 +1,7 @@
-import { readFileSync } from "fs";
-import { join } from "path";
 import { tool } from "ai";
 import { z } from "zod";
 import { db } from "../db";
+import modulesJsonData from "./prompts/modules.json";
 import {
   artConcepts,
   artPatterns,
@@ -1104,11 +1103,8 @@ async function loadEnabledTools(): Promise<
   // File defaults are the source of truth for which tools exist.
   // DB config only overrides enabled/disabled for tools it knows about.
   const toolsJson = await getConfig("agent_tools");
-  const configPath = join(import.meta.dirname, "prompts", "modules.json");
-  const config: { tools: ToolConfig[] } = JSON.parse(
-    readFileSync(configPath, "utf-8"),
-  );
-  const fileTools: ToolConfig[] = config.tools;
+  const fileTools: ToolConfig[] = (modulesJsonData as { tools: ToolConfig[] })
+    .tools;
   const dbOverrides: ToolConfig[] = toolsJson ? JSON.parse(toolsJson) : [];
   const overrideMap = new Map(dbOverrides.map((t) => [t.name, t]));
   const tools = fileTools.map((t) =>
