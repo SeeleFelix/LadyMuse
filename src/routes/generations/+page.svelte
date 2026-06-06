@@ -339,7 +339,7 @@
     {#if store.viewMode === "library"}
       <LibraryView {store} {allTags} oncontextmenu={handleContextMenu} />
     {:else if store.viewMode === "inspect"}
-      <InspectView {store} {allTags} />
+      <InspectView {store} {allTags} oncontextmenu={handleContextMenu} />
     {:else if store.viewMode === "compare"}
       <CompareView {store} {allTags} />
     {/if}
@@ -364,6 +364,14 @@
       onaddtag={(_t: string) => {}}
       onremovetag={(_id: number) => {}}
       onclose={() => (store.activeImage = null)}
+      ondelete={() => {
+        if (store.activeImage) {
+          deleteConfirm = {
+            paths: [store.activeImage.relativePath],
+            message: `确定要删除 "${store.activeImage.relativePath.split("/").pop()}" 吗？`,
+          };
+        }
+      }}
     />
   {/if}
 </div>

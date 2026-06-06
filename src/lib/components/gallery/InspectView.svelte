@@ -11,8 +11,15 @@
     slug: string;
   }
 
-  let { store, allTags = [] }: { store: GalleryStore; allTags?: Tag[] } =
-    $props();
+  let {
+    store,
+    allTags = [],
+    oncontextmenu,
+  }: {
+    store: GalleryStore;
+    allTags?: Tag[];
+    oncontextmenu?: (path: string, e: MouseEvent) => void;
+  } = $props();
 
   let zoom = $state(1);
   let panX = $state(0);
@@ -249,6 +256,9 @@
               zoom}px)"
             draggable="false"
             ondblclick={handleDblClickImage}
+            oncontextmenu={(e) =>
+              store.activeImage &&
+              oncontextmenu?.(store.activeImage.relativePath, e)}
           />
         {:else if store.activeImage?.isMissing}
           <div class="text-center">
