@@ -1,4 +1,5 @@
 import { execSync } from "child_process";
+import { getFileSyncService } from "$lib/server/file-sync-service";
 
 function ensureSearXNG() {
   const url = process.env.SEARXNG_URL || "http://localhost:8888";
@@ -63,3 +64,5 @@ if '- json' not in c.split('formats:')[1].split('server:')[0]:
 }
 
 ensureSearXNG();
+
+getFileSyncService();

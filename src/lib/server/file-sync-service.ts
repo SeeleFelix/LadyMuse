@@ -100,15 +100,8 @@ export class FileSyncService {
   subscribe(fn: Subscriber): () => void {
     this.subscribers.add(fn);
 
-    if (this.subscribers.size === 1) {
-      this.start();
-    }
-
     return () => {
       this.subscribers.delete(fn);
-      if (this.subscribers.size === 0) {
-        this.stop();
-      }
     };
   }
 
@@ -332,7 +325,9 @@ export async function getFileSyncService(
   instancePromise = (async () => {
     const outputDir = await getOutputDir();
     if (!outputDir) return null;
-    return new FileSyncService(outputDir, options);
+    const service = new FileSyncService(outputDir, options);
+    service.start();
+    return service;
   })();
 
   return instancePromise;
