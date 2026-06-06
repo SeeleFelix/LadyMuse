@@ -14,7 +14,6 @@
     onsearchchange,
     onsortchange,
     onrefresh,
-    ontogglefilters,
   }: {
     viewMode?: ViewMode;
     searchQuery?: string;
@@ -24,7 +23,6 @@
     onsearchchange: (query: string) => void;
     onsortchange: (sort: SortOption) => void;
     onrefresh: () => void;
-    ontogglefilters: () => void;
   } = $props();
 
   let searchInput = $state(searchQuery);
@@ -125,27 +123,6 @@
     <span class="text-xs text-zinc-500">
       {totalImages} 张图片
     </span>
-
-    <!-- Filter toggle -->
-    <button
-      onclick={ontogglefilters}
-      class="rounded px-2 py-1 text-xs text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
-      title="筛选条件"
-    >
-      <svg
-        class="w-3.5 h-3.5"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        stroke-width="2"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-        />
-      </svg>
-    </button>
 
     <!-- Refresh -->
     <button

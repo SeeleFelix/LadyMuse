@@ -3,27 +3,18 @@
 
   let {
     filters,
-    open = false,
     onfilterschange,
-    onclose,
   }: {
     filters: FilterCriteria;
-    open?: boolean;
     onfilterschange: (filters: FilterCriteria) => void;
-    onclose: () => void;
   } = $props();
 
   const colorOptions = [
-    { value: "red", label: "红色", class: "bg-red-500" },
-    { value: "yellow", label: "黄色", class: "bg-yellow-500" },
-    { value: "green", label: "绿色", class: "bg-green-500" },
-    { value: "blue", label: "蓝色", class: "bg-blue-500" },
-    { value: "purple", label: "紫色", class: "bg-purple-500" },
-  ];
-
-  const flagOptions = [
-    { value: "pick", label: "Pick", class: "text-green-400" },
-    { value: "reject", label: "Reject", class: "text-red-400" },
+    { value: "red", label: "红", class: "bg-red-500" },
+    { value: "yellow", label: "黄", class: "bg-yellow-500" },
+    { value: "green", label: "绿", class: "bg-green-500" },
+    { value: "blue", label: "蓝", class: "bg-blue-500" },
+    { value: "purple", label: "紫", class: "bg-purple-500" },
   ];
 
   let ratingMin = $derived(filters.user?.ratingMin ?? 0);
@@ -89,127 +80,83 @@
   }
 </script>
 
-{#if open}
-  <div
-    class="w-64 shrink-0 border-r border-zinc-800 bg-zinc-900/50 overflow-y-auto"
-  >
-    <div class="p-4">
-      <!-- Header -->
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-sm font-medium text-zinc-300">筛选</h3>
-        <button onclick={onclose} class="text-zinc-500 hover:text-zinc-300">
-          <svg
-            class="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
-        </button>
-      </div>
-
-      <!-- Rating filter -->
-      <div class="mb-4">
-        <div class="text-xs text-zinc-500 mb-2">最低评分</div>
-        <div class="flex items-center gap-1">
-          {#each [0, 1, 2, 3, 4, 5] as r}
-            <button
-              onclick={() => setRatingMin(r)}
-              class="text-lg {r <= ratingMin
-                ? 'text-amber-400'
-                : 'text-zinc-700'} hover:text-amber-300 transition-colors"
-            >
-              {r > 0 ? "★" : "-"}
-            </button>
-          {/each}
-        </div>
-      </div>
-
-      <!-- Color label filter -->
-      <div class="mb-4">
-        <div class="text-xs text-zinc-500 mb-2">颜色标记</div>
-        <div class="flex flex-wrap gap-2">
-          {#each colorOptions as color}
-            <button
-              onclick={() => toggleColorLabel(color.value)}
-              class="flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors {colorLabels.includes(
-                color.value,
-              )
-                ? 'bg-zinc-700 text-white'
-                : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'}"
-            >
-              <span
-                class="w-3 h-3 rounded-full {color.class} {colorLabels.includes(
-                  color.value,
-                )
-                  ? 'opacity-100'
-                  : 'opacity-40'}"
-              ></span>
-              {color.label}
-            </button>
-          {/each}
-        </div>
-      </div>
-
-      <!-- Flag filter -->
-      <div class="mb-4">
-        <div class="text-xs text-zinc-500 mb-2">标记</div>
-        <div class="flex flex-wrap gap-2">
-          {#each flagOptions as flag}
-            <button
-              onclick={() =>
-                setFlag(flags.includes(flag.value) ? null : flag.value)}
-              class="rounded px-2 py-1 text-xs transition-colors {flags.includes(
-                flag.value,
-              )
-                ? 'bg-zinc-700 text-white'
-                : flag.class + ' hover:bg-zinc-800'}"
-            >
-              {flag.label}
-            </button>
-          {/each}
-        </div>
-      </div>
-
-      <!-- Positive prompt search -->
-      <div class="mb-4">
-        <div class="text-xs text-zinc-500 mb-2">正向提示词</div>
-        <input
-          type="text"
-          value={positivePrompt}
-          oninput={(e) => setPositivePrompt(e.target.value)}
-          placeholder="包含关键词..."
-          class="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300 placeholder-zinc-600 focus:border-violet-500 focus:outline-none"
-        />
-      </div>
-
-      <!-- Negative prompt search -->
-      <div class="mb-4">
-        <div class="text-xs text-zinc-500 mb-2">反向提示词</div>
-        <input
-          type="text"
-          value={negativePrompt}
-          oninput={(e) => setNegativePrompt(e.target.value)}
-          placeholder="包含关键词..."
-          class="w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300 placeholder-zinc-600 focus:border-violet-500 focus:outline-none"
-        />
-      </div>
-
-      <!-- Clear all -->
-      {#if hasActiveFilters()}
-        <button
-          onclick={clearAll}
-          class="w-full rounded border border-zinc-700 px-2 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors"
-        >
-          清除所有筛选
-        </button>
-      {/if}
-    </div>
+<div
+  class="flex items-center gap-3 px-4 py-1.5 border-b border-zinc-800 bg-zinc-900/30 flex-wrap"
+>
+  <!-- Rating -->
+  <div class="flex items-center gap-0.5">
+    <span class="text-[10px] text-zinc-600 mr-1 select-none">评分</span>
+    {#each [0, 1, 2, 3, 4, 5] as r}
+      <button
+        onclick={() => setRatingMin(r)}
+        class="text-xs px-0.5 {r <= ratingMin
+          ? 'text-amber-400'
+          : 'text-zinc-700'} hover:text-amber-300 transition-colors"
+      >
+        {r > 0 ? "★" : "-"}
+      </button>
+    {/each}
   </div>
-{/if}
+
+  <span class="w-px h-4 bg-zinc-700"></span>
+
+  <!-- Color labels -->
+  <div class="flex items-center gap-1">
+    {#each colorOptions as color}
+      <button
+        onclick={() => toggleColorLabel(color.value)}
+        class="w-4 h-4 rounded-full {color.class} {colorLabels.includes(
+          color.value,
+        )
+          ? 'ring-1 ring-white/50 scale-110'
+          : 'opacity-30 hover:opacity-70'} transition-all"
+        title={color.label}
+      ></button>
+    {/each}
+  </div>
+
+  <span class="w-px h-4 bg-zinc-700"></span>
+
+  <!-- Flags -->
+  <div class="flex items-center gap-1">
+    <button
+      onclick={() => setFlag(flags.includes("pick") ? null : "pick")}
+      class="text-xs rounded px-1.5 py-0.5 {flags.includes('pick')
+        ? 'bg-green-500/20 text-green-400'
+        : 'text-zinc-600 hover:text-green-400'} transition-colors">Pick</button
+    >
+    <button
+      onclick={() => setFlag(flags.includes("reject") ? null : "reject")}
+      class="text-xs rounded px-1.5 py-0.5 {flags.includes('reject')
+        ? 'bg-red-500/20 text-red-400'
+        : 'text-zinc-600 hover:text-red-400'} transition-colors">Reject</button
+    >
+  </div>
+
+  <span class="w-px h-4 bg-zinc-700"></span>
+
+  <!-- Text search -->
+  <input
+    type="text"
+    value={positivePrompt}
+    oninput={(e) => setPositivePrompt(e.target.value)}
+    placeholder="正向提示词..."
+    class="w-32 rounded border border-zinc-800 bg-zinc-800/50 px-1.5 py-0.5 text-[11px] text-zinc-300 placeholder-zinc-600 focus:border-violet-500/50 focus:outline-none"
+  />
+  <input
+    type="text"
+    value={negativePrompt}
+    oninput={(e) => setNegativePrompt(e.target.value)}
+    placeholder="反向提示词..."
+    class="w-32 rounded border border-zinc-800 bg-zinc-800/50 px-1.5 py-0.5 text-[11px] text-zinc-300 placeholder-zinc-600 focus:border-violet-500/50 focus:outline-none"
+  />
+
+  <!-- Clear -->
+  {#if hasActiveFilters()}
+    <button
+      onclick={clearAll}
+      class="text-[10px] text-zinc-500 hover:text-zinc-300 ml-auto"
+      >清除筛选</button
+    >
+  {/if}
+</div>

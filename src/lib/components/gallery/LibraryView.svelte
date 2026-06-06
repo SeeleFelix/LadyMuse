@@ -56,10 +56,6 @@
   function handleViewModeChange(mode: ViewMode) {
     store.setViewMode(mode);
   }
-
-  function handleToggleFilters() {
-    store.sidebarOpen = !store.sidebarOpen;
-  }
 </script>
 
 <div class="flex flex-col h-full bg-zinc-950">
@@ -73,20 +69,17 @@
     onsearchchange={handleSearchChange}
     onsortchange={handleSortChange}
     onrefresh={() => store.refresh()}
-    ontogglefilters={handleToggleFilters}
   />
 
-  <!-- Main content: three columns -->
-  <div class="flex-1 flex min-h-0 overflow-hidden">
-    <!-- Filter Panel (left) -->
-    <FilterPanel
-      open={store.sidebarOpen}
-      filters={store.filters}
-      onfilterschange={(f) => store.setFilters(f)}
-      onclose={() => (store.sidebarOpen = false)}
-    />
+  <!-- Filter bar (horizontal) -->
+  <FilterPanel
+    filters={store.filters}
+    onfilterschange={(f) => store.setFilters(f)}
+  />
 
-    <!-- Virtual Grid (center) -->
+  <!-- Main content: grid + optional detail panel -->
+  <div class="flex-1 flex min-h-0 overflow-hidden">
+    <!-- Virtual Grid -->
     <div class="flex-1 overflow-y-auto">
       <VirtualGrid
         images={store.images}
