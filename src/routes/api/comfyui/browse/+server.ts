@@ -121,6 +121,9 @@ function mapToFrontendFormat(image: any) {
     tags: image.tags,
 
     // Additional fields from ImageResult
+    rating: image.rating,
+    colorLabel: image.colorLabel,
+    flag: image.flag,
     aspectRatio: image.aspectRatio,
     fileFormat: image.fileFormat,
     hasAlpha: image.hasAlpha,
