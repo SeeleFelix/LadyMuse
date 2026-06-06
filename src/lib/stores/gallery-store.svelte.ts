@@ -492,6 +492,9 @@ export function createGalleryStore(api: {
     },
 
     // State setters
+    set activeImage(value: ImageResult | null) {
+      activeImage = value;
+    },
     set sidebarOpen(value: boolean) {
       sidebarOpen = value;
     },
