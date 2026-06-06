@@ -297,7 +297,7 @@
         onremovetag={(id) => {
           /* TODO: Implement tag remove */
         }}
-        onclose={() => (store.activeImage = null)}
+        onclose={() => store.setViewMode("library")}
       />
     {/if}
   </div>
