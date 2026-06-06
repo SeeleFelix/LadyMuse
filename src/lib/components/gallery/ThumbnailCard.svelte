@@ -88,13 +88,13 @@
 
     {#if image.flag === "pick"}
       <div
-        class="absolute bottom-1 left-1 text-green-400 text-xs font-bold bg-black/50 rounded px-1"
+        class="absolute bottom-1 right-1 text-green-400 text-xs font-bold bg-black/50 rounded px-1"
       >
         P
       </div>
     {:else if image.flag === "reject"}
       <div
-        class="absolute bottom-1 left-1 text-red-400 text-xs font-bold bg-black/50 rounded px-1"
+        class="absolute bottom-1 right-1 text-red-400 text-xs font-bold bg-black/50 rounded px-1"
       >
         R
       </div>
