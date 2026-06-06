@@ -100,13 +100,13 @@
         store.deselectAll();
         break;
       case "ArrowLeft":
-        if (!ctrl) {
+        if (!ctrl && store.viewMode !== "inspect") {
           e.preventDefault();
           navigateImage(-1);
         }
         break;
       case "ArrowRight":
-        if (!ctrl) {
+        if (!ctrl && store.viewMode !== "inspect") {
           e.preventDefault();
           navigateImage(1);
         }
