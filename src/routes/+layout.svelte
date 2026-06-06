@@ -25,12 +25,39 @@
       ? 'w-56'
       : 'w-14'}"
   >
-    <div class="flex h-14 items-center border-b border-zinc-800 px-4">
+    <div
+      class="flex h-14 items-center justify-between border-b border-zinc-800 px-4"
+    >
+      {#if sidebarOpen}
+        <span class="text-lg font-bold text-violet-400">LadyMuse</span>
+      {/if}
       <button
         onclick={() => (sidebarOpen = !sidebarOpen)}
-        class="text-lg font-bold text-violet-400 hover:text-violet-300"
+        class="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+        title={sidebarOpen ? "收起菜单" : "展开菜单"}
       >
-        {sidebarOpen ? "LadyMuse" : "LM"}
+        <svg
+          class="w-4 h-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          {#if sidebarOpen}
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+            />
+          {:else}
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M13 5l7 7-7 7M5 5l7 7-7 7"
+            />
+          {/if}
+        </svg>
       </button>
     </div>
 
