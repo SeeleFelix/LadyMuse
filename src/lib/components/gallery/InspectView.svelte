@@ -276,30 +276,31 @@
       </div>
     </div>
 
-    <!-- Detail Panel -->
-    {#if store.activeImage}
-      <DetailPanel
-        image={store.activeImage}
-        {allTags}
-        onrate={(r) =>
-          store.updateAttributes(store.activeImage!.relativePath, {
-            rating: r,
-          })}
-        oncolor={(c) =>
-          store.updateAttributes(store.activeImage!.relativePath, {
-            colorLabel: c,
-          })}
-        onflag={(f) =>
-          store.updateAttributes(store.activeImage!.relativePath, { flag: f })}
-        onaddtag={(t) => {
-          /* TODO: Implement tag add */
-        }}
-        onremovetag={(id) => {
-          /* TODO: Implement tag remove */
-        }}
-        onclose={() => store.setViewMode("library")}
-      />
-    {/if}
+    <!-- Detail Panel (right, always visible) -->
+    <DetailPanel
+      image={store.activeImage}
+      {allTags}
+      onrate={(r) =>
+        store.activeImage &&
+        store.updateAttributes(store.activeImage.relativePath, {
+          rating: r,
+        })}
+      oncolor={(c) =>
+        store.activeImage &&
+        store.updateAttributes(store.activeImage.relativePath, {
+          colorLabel: c,
+        })}
+      onflag={(f) =>
+        store.activeImage &&
+        store.updateAttributes(store.activeImage.relativePath, { flag: f })}
+      onaddtag={(t) => {
+        /* TODO: Implement tag add */
+      }}
+      onremovetag={(id) => {
+        /* TODO: Implement tag remove */
+      }}
+      onclose={() => store.setViewMode("library")}
+    />
   </div>
 
   <!-- Filmstrip -->

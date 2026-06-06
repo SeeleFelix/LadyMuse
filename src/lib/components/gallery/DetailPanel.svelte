@@ -103,12 +103,12 @@
   }
 </script>
 
-{#if image}
-  <div
-    class="w-96 shrink-0 border-l border-zinc-800 bg-zinc-900/50 overflow-y-auto p-4"
-  >
-    <div class="flex items-center justify-between mb-4">
-      <h3 class="text-sm font-medium text-zinc-300">图片详情</h3>
+<div
+  class="w-96 shrink-0 border-l border-zinc-800 bg-zinc-900/50 overflow-y-auto p-4"
+>
+  <div class="flex items-center justify-between mb-4">
+    <h3 class="text-sm font-medium text-zinc-300">图片详情</h3>
+    {#if image}
       <button onclick={onclose} class="text-zinc-500 hover:text-zinc-300">
         <svg
           class="h-4 w-4"
@@ -124,8 +124,28 @@
           />
         </svg>
       </button>
-    </div>
+    {/if}
+  </div>
 
+  {#if !image}
+    <div class="flex flex-col items-center justify-center h-64 text-center">
+      <svg
+        class="w-10 h-10 text-zinc-700 mb-3"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.5"
+          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+        />
+      </svg>
+      <p class="text-sm text-zinc-600">点击或选择图片</p>
+      <p class="text-xs text-zinc-700 mt-1">查看详情和元数据</p>
+    </div>
+  {:else}
     <!-- Image preview -->
     <div class="rounded-lg overflow-hidden bg-zinc-800 mb-4">
       {#if image.isMissing}
@@ -260,5 +280,5 @@
         发送到 ComfyUI
       </button>
     {/if}
-  </div>
-{/if}
+  {/if}
+</div>
