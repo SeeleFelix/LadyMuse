@@ -2,7 +2,6 @@
   import GalleryToolbar from "./GalleryToolbar.svelte";
   import FilterPanel from "./FilterPanel.svelte";
   import VirtualGrid from "./VirtualGrid.svelte";
-  import DetailPanel from "./DetailPanel.svelte";
   import StatusBar from "./StatusBar.svelte";
   import type { GalleryStore } from "$lib/stores/gallery-store.svelte";
   import type { SortOption, ViewMode } from "$lib/stores/gallery-store.svelte";
@@ -93,32 +92,6 @@
         loadingMore={store.loading}
       />
     </div>
-
-    <!-- Detail Panel (right, always visible) -->
-    <DetailPanel
-      image={store.activeImage}
-      {allTags}
-      onrate={(r) =>
-        store.activeImage &&
-        store.updateAttributes(store.activeImage.relativePath, {
-          rating: r,
-        })}
-      oncolor={(c) =>
-        store.activeImage &&
-        store.updateAttributes(store.activeImage.relativePath, {
-          colorLabel: c,
-        })}
-      onflag={(f) =>
-        store.activeImage &&
-        store.updateAttributes(store.activeImage.relativePath, { flag: f })}
-      onaddtag={(t) => {
-        /* TODO: Implement tag add */
-      }}
-      onremovetag={(id) => {
-        /* TODO: Implement tag remove */
-      }}
-      onclose={() => (store.activeImage = null)}
-    />
   </div>
 
   <!-- Status Bar -->

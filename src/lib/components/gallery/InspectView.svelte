@@ -1,5 +1,4 @@
 <script lang="ts">
-  import DetailPanel from "./DetailPanel.svelte";
   import type {
     GalleryStore,
     ImageResult,
@@ -275,32 +274,6 @@
         {/if}
       </div>
     </div>
-
-    <!-- Detail Panel (right, always visible) -->
-    <DetailPanel
-      image={store.activeImage}
-      {allTags}
-      onrate={(r) =>
-        store.activeImage &&
-        store.updateAttributes(store.activeImage.relativePath, {
-          rating: r,
-        })}
-      oncolor={(c) =>
-        store.activeImage &&
-        store.updateAttributes(store.activeImage.relativePath, {
-          colorLabel: c,
-        })}
-      onflag={(f) =>
-        store.activeImage &&
-        store.updateAttributes(store.activeImage.relativePath, { flag: f })}
-      onaddtag={(t) => {
-        /* TODO: Implement tag add */
-      }}
-      onremovetag={(id) => {
-        /* TODO: Implement tag remove */
-      }}
-      onclose={() => store.setViewMode("library")}
-    />
   </div>
 
   <!-- Filmstrip -->

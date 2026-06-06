@@ -13,6 +13,7 @@
   import ContextMenu from "$lib/components/gallery/ContextMenu.svelte";
   import ConfirmDialog from "$lib/components/gallery/ConfirmDialog.svelte";
   import CollectionPanel from "$lib/components/gallery/CollectionPanel.svelte";
+  import DetailPanel from "$lib/components/gallery/DetailPanel.svelte";
   import type { ImageResult } from "$lib/stores/gallery-store.svelte";
 
   interface Collection {
@@ -343,6 +344,28 @@
       <CompareView {store} {allTags} />
     {/if}
   </div>
+
+  <!-- Right detail panel (full height) -->
+  {#if store.viewMode !== "compare"}
+    <DetailPanel
+      image={store.activeImage}
+      {allTags}
+      onrate={(r: number) =>
+        store.activeImage &&
+        store.updateAttributes(store.activeImage.relativePath, { rating: r })}
+      oncolor={(c: string | null) =>
+        store.activeImage &&
+        store.updateAttributes(store.activeImage.relativePath, {
+          colorLabel: c,
+        })}
+      onflag={(f: string | null) =>
+        store.activeImage &&
+        store.updateAttributes(store.activeImage.relativePath, { flag: f })}
+      onaddtag={(_t: string) => {}}
+      onremovetag={(_id: number) => {}}
+      onclose={() => (store.activeImage = null)}
+    />
+  {/if}
 </div>
 
 <!-- Batch Actions Bar -->
