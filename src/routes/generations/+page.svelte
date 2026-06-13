@@ -277,16 +277,34 @@
   // Delete handlers
   async function confirmDelete() {
     if (!deleteConfirm) return;
-    let deleted = 0;
-    for (const path of deleteConfirm.paths) {
-      const res = await fetch("/api/comfyui/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ relative_path: path }),
-      });
-      if (res.ok) deleted++;
+    const res = await fetch("/api/comfyui/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ relative_paths: deleteConfirm.paths }),
+    });
+
+    if (res.status === 409) {
+      const body = await res.json();
+      const count = body.protected?.length ?? 0;
+      const names = (body.protected ?? [])
+        .map((p: { relativePath: string }) => p.relativePath.split("/").pop())
+        .join(", ");
+      showToast(
+        `${count} 张图片受保护（pick/评分）未删除：${names}。请先取消标记。`,
+        "error",
+      );
+      deleteConfirm = null;
+      return;
     }
-    showToast(`已删除 ${deleted} 张图片`, "success");
+
+    if (!res.ok) {
+      showToast("删除失败", "error");
+      deleteConfirm = null;
+      return;
+    }
+
+    const body = await res.json();
+    showToast(`已删除 ${body.deleted} 张图片`, "success");
     store.deselectAll();
     store.refresh();
     deleteConfirm = null;
