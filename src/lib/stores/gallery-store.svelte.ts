@@ -302,6 +302,12 @@ export function createGalleryStore(api: {
    */
   function select(path: string, multi = false, range = false) {
     const currentIndex = images.findIndex((img) => img.relativePath === path);
+    console.log("[img-debug] select()", {
+      path,
+      imagesLen: images.length,
+      index: currentIndex,
+      activeBefore: activeImage?.relativePath ?? null,
+    });
 
     if (
       range &&
@@ -338,7 +344,13 @@ export function createGalleryStore(api: {
     }
 
     // Update active image
-    activeImage = images.find((img) => img.relativePath === path) ?? null;
+    const found = images.find((img) => img.relativePath === path) ?? null;
+    console.log("[img-debug] activeImage assigned", {
+      requested: path,
+      foundPath: found?.relativePath ?? null,
+      activeAfter: found?.relativePath ?? null,
+    });
+    activeImage = found;
   }
 
   /**
@@ -408,11 +420,20 @@ export function createGalleryStore(api: {
    * Handle server-sent events for file changes
    */
   function handleSSEEvent(event: FileEvent) {
+    console.log("[img-debug] sse", {
+      type: event.type,
+      path: event.path,
+      activeBefore: activeImage?.relativePath ?? null,
+      imagesLen: images.length,
+    });
     if (event.type === "delete") {
       images = images.filter((img) => img.relativePath !== event.path);
       _removeSelection(event.path);
       if (activeImage?.relativePath === event.path) {
         activeImage = images[0] ?? null;
+        console.log("[img-debug] activeImage replaced by SSE delete", {
+          newPath: activeImage?.relativePath ?? null,
+        });
       }
       pagination.total = Math.max(0, pagination.total - 1);
     } else {

@@ -63,6 +63,13 @@
     return `/api/comfyui/images/${encodeURIComponent(image.relativePath)}`;
   }
 
+  $effect(() => {
+    console.log("[img-debug] DetailPanel render", {
+      propPath: image?.relativePath ?? null,
+      url: image ? getImageUrl() : null,
+    });
+  });
+
   function hasMetadata(): boolean {
     if (!image) return false;
     return !!(
