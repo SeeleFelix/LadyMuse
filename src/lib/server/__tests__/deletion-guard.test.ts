@@ -7,8 +7,10 @@ vi.mock("../db", () => ({ db: vi.fn() }));
 
 import { findProtectedPaths } from "../deletion-guard";
 import { imageAttributes } from "../db/schema";
+import * as schema from "../db/schema";
+import type { DB } from "../db";
 
-let testDb: ReturnType<typeof drizzle>;
+let testDb: DB;
 
 beforeEach(() => {
   const sqlite = new Database(":memory:");
@@ -44,7 +46,7 @@ beforeEach(() => {
       is_missing INTEGER DEFAULT false
     );
   `);
-  testDb = drizzle(sqlite);
+  testDb = drizzle(sqlite, { schema });
 });
 
 describe("findProtectedPaths", () => {
@@ -82,5 +84,13 @@ describe("findProtectedPaths", () => {
       .values([{ relativePath: "rated.png", rating: 3, flag: null }]);
     const result = await findProtectedPaths(testDb, ["rated.png", "ghost.png"]);
     expect(result).toEqual([{ relativePath: "rated.png", reason: "rating" }]);
+  });
+
+  it("reports pick reason when an image has both pick flag and rating", async () => {
+    await testDb
+      .insert(imageAttributes)
+      .values([{ relativePath: "both.png", rating: 5, flag: "pick" }]);
+    const result = await findProtectedPaths(testDb, ["both.png"]);
+    expect(result).toEqual([{ relativePath: "both.png", reason: "pick" }]);
   });
 });

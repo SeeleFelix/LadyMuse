@@ -1,20 +1,18 @@
 import { inArray } from "drizzle-orm";
-import type { drizzle } from "drizzle-orm/better-sqlite3";
 import { imageAttributes } from "./db/schema";
+import type { DB } from "./db";
 
 export interface ProtectedPath {
   relativePath: string;
   reason: "pick" | "rating";
 }
 
-type DbClient = ReturnType<typeof drizzle>;
-
 /**
  * Return the subset of `paths` that are curated (pick flag or non-zero rating)
  * and therefore must not be deleted. Order follows the query result.
  */
 export async function findProtectedPaths(
-  db: DbClient,
+  db: DB,
   paths: string[],
 ): Promise<ProtectedPath[]> {
   if (paths.length === 0) return [];
