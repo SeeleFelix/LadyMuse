@@ -32,6 +32,8 @@ export const POST: RequestHandler = async ({ request }) => {
     );
   }
 
+  // Best-effort: a mid-batch failure returns 500 with the count deleted so far.
+  // The caller reconciles final state via store.refresh() rather than this count.
   let deleted = 0;
   for (const relativePath of relative_paths) {
     const absPath = await resolveImagePath(relativePath);
@@ -42,18 +44,27 @@ export const POST: RequestHandler = async ({ request }) => {
       clearCache();
     } catch (e: any) {
       return json(
-        { error: `Failed to delete file: ${e.message}` },
+        { error: `Failed to delete file: ${e.message}`, deleted },
         { status: 500 },
       );
     }
 
-    await db.delete(imageTags).where(eq(imageTags.relativePath, relativePath));
-    await db
-      .delete(collectionImages)
-      .where(eq(collectionImages.relativePath, relativePath));
-    await db
-      .delete(imageAttributes)
-      .where(eq(imageAttributes.relativePath, relativePath));
+    try {
+      await db
+        .delete(imageTags)
+        .where(eq(imageTags.relativePath, relativePath));
+      await db
+        .delete(collectionImages)
+        .where(eq(collectionImages.relativePath, relativePath));
+      await db
+        .delete(imageAttributes)
+        .where(eq(imageAttributes.relativePath, relativePath));
+    } catch (e: any) {
+      return json(
+        { error: "Failed to clean database rows", relativePath, deleted },
+        { status: 500 },
+      );
+    }
 
     broadcastDeletion(relativePath);
     deleted++;
