@@ -283,6 +283,20 @@ The three pieces are independent and should be implemented and reviewed separate
 3. **Phase 3 — Image-mismatch diagnostic** (§4). Tiny, additive logging. Can land in parallel with
    Phase 1 or 2; the resulting fix is a separate follow-up once the trace is captured.
 
+### 5.1 Database change protocol
+
+Phase 2 introduces a new table and therefore a **Drizzle migration**. The project's DB protocol
+requires two steps around any schema change:
+
+1. **Back up the database first.** Before running a migration or any destructive DB operation,
+   copy `./ladymuse.db` to `./ladymuse.db.bak.<YYYYMMDDHHmmSS>`.
+2. **Go through a Drizzle migration.** Author the new table in `./src/lib/server/db/schema.ts`,
+   then generate the next numbered migration into `./drizzle/` (following the current latest,
+   `0017_fast_indices.sql`). Never edit the live DB with ad-hoc SQL.
+
+The implementation plan must call out the backup step explicitly before the `drizzle-kit migrate`
+command, so it cannot be skipped.
+
 ---
 
 ## 6. Out of Scope
