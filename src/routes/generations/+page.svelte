@@ -286,9 +286,13 @@
     if (res.status === 409) {
       const body = await res.json();
       const count = body.protected?.length ?? 0;
-      const names = (body.protected ?? [])
+      const allNames = (body.protected ?? [])
         .map((p: { relativePath: string }) => p.relativePath.split("/").pop())
-        .join(", ");
+        .filter(Boolean);
+      const names =
+        allNames.length > 3
+          ? `${allNames.slice(0, 3).join(", ")} 等 ${allNames.length} 张`
+          : allNames.join(", ");
       showToast(
         `${count} 张图片受保护（pick/评分）未删除：${names}。请先取消标记。`,
         "error",
