@@ -34,6 +34,19 @@ export interface ImageResult {
   collectionIds: number[];
 }
 
+export interface TrashListItem {
+  id: number;
+  originalRelativePath: string;
+  rating: number;
+  flag: string | null;
+  colorLabel: string | null;
+  width: number | null;
+  height: number | null;
+  aspectRatio: string | null;
+  fileFormat: string | null;
+  deletedAt: string;
+}
+
 export type ViewMode = "library" | "inspect" | "compare";
 
 export type SortField =
@@ -135,10 +148,12 @@ export interface FilterCriteria {
   properties?: ImagePropertiesFilter;
 }
 
-export interface FileEvent {
-  type: "add" | "delete" | "modify";
-  path: string;
-}
+export type FileEvent =
+  | { type: "add" | "delete" | "modify"; path: string }
+  | { type: "trash"; path: string; trashId: number }
+  | { type: "restore"; path: string; renamed: boolean }
+  | { type: "purge"; trashId: number }
+  | { type: "empty" };
 
 // API response type for queries
 export interface QueryResult {
@@ -191,6 +206,10 @@ export function createGalleryStore(api: {
     hasLess: false,
   });
   let viewMode = $state<ViewMode>("library");
+  let trashView = $state<boolean>(false);
+  let trashCount = $state(0);
+  let trashImages = $state<TrashListItem[]>([]);
+  let trashPagination = $state({ page: 1, pageSize: 50, total: 0 });
   let sidebarOpen = $state(true);
   let loading = $state(false);
   let error = $state<string | null>(null);
@@ -260,6 +279,44 @@ export function createGalleryStore(api: {
     } finally {
       loading = false;
     }
+  }
+
+  /**
+   * Fetch the total count of trashed items (cosmetic badge value).
+   */
+  async function loadTrashCount() {
+    try {
+      const res = await fetch("/api/comfyui/trash?page=1&pageSize=1");
+      if (res.ok) {
+        const body = await res.json();
+        trashCount = body.total ?? 0;
+      }
+    } catch {
+      // ignore — count is cosmetic
+    }
+  }
+
+  /**
+   * Fetch a page of trashed items from the trash endpoint.
+   */
+  async function loadTrashPage(page = 1) {
+    const res = await fetch(
+      `/api/comfyui/trash?page=${page}&pageSize=${trashPagination.pageSize}`,
+    );
+    if (res.ok) {
+      const body = await res.json();
+      trashImages = body.items ?? [];
+      trashPagination = { ...trashPagination, page, total: body.total ?? 0 };
+      trashCount = body.total ?? 0;
+    }
+  }
+
+  /**
+   * Toggle trash view. When opening, load the first trash page.
+   */
+  function setTrashView(open: boolean) {
+    trashView = open;
+    if (open) loadTrashPage(1);
   }
 
   /**
@@ -422,7 +479,7 @@ export function createGalleryStore(api: {
   function handleSSEEvent(event: FileEvent) {
     console.log("[img-debug] sse", {
       type: event.type,
-      path: event.path,
+      path: "path" in event ? event.path : null,
       activeBefore: activeImage?.relativePath ?? null,
       imagesLen: images.length,
     });
@@ -436,8 +493,39 @@ export function createGalleryStore(api: {
         });
       }
       pagination.total = Math.max(0, pagination.total - 1);
+    } else if (event.type === "trash") {
+      // Soft-delete: identical gallery removal, plus a trash-count bump.
+      images = images.filter((img) => img.relativePath !== event.path);
+      _removeSelection(event.path);
+      if (activeImage?.relativePath === event.path) {
+        activeImage = images[0] ?? null;
+      }
+      pagination.total = Math.max(0, pagination.total - 1);
+      trashCount += 1;
+      if (trashView) loadTrashPage(trashPagination.page);
+    } else if (event.type === "restore") {
+      trashCount = Math.max(0, trashCount - 1);
+      if (!trashView) {
+        if (_refreshTimer) clearTimeout(_refreshTimer);
+        _refreshTimer = setTimeout(async () => {
+          _refreshTimer = null;
+          await untrack(() => loadPage());
+          console.log("[img-debug] sse reload fired", {
+            imagesLen: images.length,
+            activeAfter: activeImage?.relativePath ?? null,
+          });
+        }, 500);
+      }
+      if (trashView) loadTrashPage(trashPagination.page);
+    } else if (event.type === "purge") {
+      trashCount = Math.max(0, trashCount - 1);
+      if (trashView) loadTrashPage(trashPagination.page);
+    } else if (event.type === "empty") {
+      trashCount = 0;
+      trashImages = [];
+      trashPagination = { ...trashPagination, total: 0 };
     } else {
-      // Debounce add/modify: batch rapid-fire events into a single reload
+      // add / modify: debounce into a single reload
       if (_refreshTimer) clearTimeout(_refreshTimer);
       _refreshTimer = setTimeout(async () => {
         _refreshTimer = null;
@@ -497,6 +585,18 @@ export function createGalleryStore(api: {
     get viewMode() {
       return viewMode;
     },
+    get trashView() {
+      return trashView;
+    },
+    get trashCount() {
+      return trashCount;
+    },
+    get trashImages() {
+      return trashImages;
+    },
+    get trashPagination() {
+      return trashPagination;
+    },
     get sidebarOpen() {
       return sidebarOpen;
     },
@@ -532,7 +632,10 @@ export function createGalleryStore(api: {
     deselectAll,
     invertSelection,
     setViewMode,
+    setTrashView,
     loadPage,
+    loadTrashPage,
+    loadTrashCount,
     refresh,
     handleSSEEvent,
     updateAttributes,
