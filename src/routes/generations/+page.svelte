@@ -307,6 +307,7 @@
       if (trashed > 0) {
         store.deselectAll();
         store.refresh();
+        store.loadTrashCount();
         showToast(`${trashed} 张已移入回收站，其余删除失败`, "error");
       } else {
         showToast("删除失败", "error");
@@ -361,6 +362,9 @@
       if (!res.ok) {
         const errBody = await res.json().catch(() => null);
         showToast(errBody?.error ?? "操作失败", "error");
+        if (store.trashView) {
+          store.loadTrashPage(store.trashPagination.page);
+        }
         return;
       }
 

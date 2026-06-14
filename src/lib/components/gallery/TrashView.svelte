@@ -16,6 +16,20 @@
   } = $props();
 
   let confirmEmpty = $state(false);
+
+  // Build a trash-thumbnail URL by encoding each path segment on its own.
+  // Encoding the whole ".trash/<id>/<basename>" as one string turns the slashes
+  // into %2F, which SvelteKit's [...path] matcher tolerates but proxies/CDNs may
+  // mangle — segment-wise encoding keeps the slashes literal and portable.
+  function trashThumbUrl(item: TrashListItem): string {
+    const basename =
+      item.originalRelativePath.split(/[\\/]/).pop() ??
+      item.originalRelativePath;
+    const segments = [".trash", String(item.id), basename].map(
+      encodeURIComponent,
+    );
+    return `/api/comfyui/images/${segments.join("/")}`;
+  }
 </script>
 
 <div class="flex h-full flex-col gap-3 p-4">
@@ -67,12 +81,7 @@
           class="group relative overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900"
         >
           <img
-            src="/api/comfyui/images/{encodeURIComponent(
-              '.trash/' +
-                item.id +
-                '/' +
-                item.originalRelativePath.split(/[\\/]/).pop(),
-            )}"
+            src={trashThumbUrl(item)}
             alt=""
             class="aspect-square w-full object-cover opacity-60"
             loading="lazy"
