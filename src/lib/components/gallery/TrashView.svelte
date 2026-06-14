@@ -71,18 +71,21 @@
               '.trash/' +
                 item.id +
                 '/' +
-                item.originalRelativePath.split('/').pop(),
+                item.originalRelativePath.split(/[\\/]/).pop(),
             )}"
             alt=""
             class="aspect-square w-full object-cover opacity-60"
             loading="lazy"
+            onerror={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = "none";
+            }}
           />
           <div class="p-2">
             <div
               class="truncate text-xs text-zinc-300"
               title={item.originalRelativePath}
             >
-              {item.originalRelativePath.split("/").pop()}
+              {item.originalRelativePath.split(/[\\/]/).pop()}
             </div>
             <div class="text-[10px] text-zinc-600">
               {new Date(item.deletedAt).toLocaleString()}

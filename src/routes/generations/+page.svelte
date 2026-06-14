@@ -344,14 +344,28 @@
     action: "restore" | "purge" | "empty",
     id?: number,
   ) {
-    if (action === "restore" && id != null) {
-      const res = await fetch("/api/comfyui/trash/restore", {
+    const url =
+      action === "empty"
+        ? "/api/comfyui/trash/empty"
+        : action === "restore"
+          ? "/api/comfyui/trash/restore"
+          : "/api/comfyui/trash/purge";
+
+    try {
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
+        body: action === "empty" ? undefined : JSON.stringify({ id }),
       });
-      if (res.ok) {
-        const body = await res.json();
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => null);
+        showToast(errBody?.error ?? "操作失败", "error");
+        return;
+      }
+
+      const body = await res.json();
+      if (action === "restore") {
         if (body.renamed) {
           showToast(
             `已恢复为 ${body.restoredPath.split("/").pop()}（原路径被占用）`,
@@ -360,20 +374,13 @@
         } else {
           showToast("已恢复", "success");
         }
-      }
-    } else if (action === "purge" && id != null) {
-      const res = await fetch("/api/comfyui/trash/purge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      if (res.ok) showToast("已彻底删除", "success");
-    } else if (action === "empty") {
-      const res = await fetch("/api/comfyui/trash/empty", { method: "POST" });
-      if (res.ok) {
-        const body = await res.json();
+      } else if (action === "purge") {
+        showToast("已彻底删除", "success");
+      } else {
         showToast(`已清空 ${body.purged} 项`, "success");
       }
+    } catch {
+      showToast("网络错误，请重试", "error");
     }
   }
 
