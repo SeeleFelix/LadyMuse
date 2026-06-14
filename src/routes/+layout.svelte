@@ -47,10 +47,10 @@
   </button>
 
   <aside
-    class="flex-col border-r border-zinc-800 bg-zinc-900 transition-all duration-200
-      hidden md:flex
+    class="flex flex-col border-r border-zinc-800 bg-zinc-900 transition-all duration-200
+      {!mobileMenuOpen ? 'hidden' : ''} md:flex
       {sidebarOpen ? 'md:w-56' : 'md:w-14'}
-      {mobileMenuOpen ? 'fixed left-0 top-0 z-50 h-full w-56 flex' : ''}"
+      {mobileMenuOpen ? '!flex fixed left-0 top-0 z-50 h-full w-56' : ''}"
   >
     <div
       class="flex h-14 items-center justify-between border-b border-zinc-800 px-4"
