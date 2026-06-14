@@ -1,4 +1,10 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  text,
+  integer,
+  real,
+  index,
+} from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 const now = sql`(datetime('now'))`;
@@ -258,41 +264,54 @@ export const stacks = sqliteTable("stacks", {
   createdAt: text("created_at").default(now),
 });
 
-export const imageAttributes = sqliteTable("image_attributes", {
-  relativePath: text("relative_path").primaryKey(),
-  rating: integer("rating").default(0),
-  colorLabel: text("color_label"),
-  flag: text("flag"),
-  notes: text("notes"),
-  stackId: integer("stack_id").references(() => stacks.id),
-  metadataJson: text("metadata_json"),
-  createdAt: text("created_at").default(now),
-  updatedAt: text("updated_at").default(now),
+export const imageAttributes = sqliteTable(
+  "image_attributes",
+  {
+    relativePath: text("relative_path").primaryKey(),
+    rating: integer("rating").default(0),
+    colorLabel: text("color_label"),
+    flag: text("flag"),
+    notes: text("notes"),
+    stackId: integer("stack_id").references(() => stacks.id),
+    metadataJson: text("metadata_json"),
+    createdAt: text("created_at").default(now),
+    updatedAt: text("updated_at").default(now),
 
-  // Extracted index fields (from ComfyUI workflow)
-  extractedModels: text("extracted_models"),
-  extractedLoras: text("extracted_loras"),
-  extractedSamplers: text("extracted_samplers"),
-  extractedSchedulers: text("extracted_schedulers"),
-  positivePrompt: text("positive_prompt"),
-  negativePrompt: text("negative_prompt"),
-  steps: integer("steps").default(0),
-  cfgScale: real("cfg_scale").default(0),
-  seed: text("seed"),
+    // Extracted index fields (from ComfyUI workflow)
+    extractedModels: text("extracted_models"),
+    extractedLoras: text("extracted_loras"),
+    extractedSamplers: text("extracted_samplers"),
+    extractedSchedulers: text("extracted_schedulers"),
+    positivePrompt: text("positive_prompt"),
+    negativePrompt: text("negative_prompt"),
+    steps: integer("steps").default(0),
+    cfgScale: real("cfg_scale").default(0),
+    seed: text("seed"),
 
-  // Image physical properties
-  width: integer("width"),
-  height: integer("height"),
-  aspectRatio: text("aspect_ratio"),
-  fileSize: integer("file_size"),
-  fileFormat: text("file_format"),
-  colorSpace: text("color_space"),
-  hasAlpha: integer("has_alpha", { mode: "boolean" }).default(false),
+    // Image physical properties
+    width: integer("width"),
+    height: integer("height"),
+    aspectRatio: text("aspect_ratio"),
+    fileSize: integer("file_size"),
+    fileFormat: text("file_format"),
+    colorSpace: text("color_space"),
+    hasAlpha: integer("has_alpha", { mode: "boolean" }).default(false),
 
-  // File tracking (for sync engine)
-  fileModifiedAt: text("file_modified_at"),
-  isMissing: integer("is_missing", { mode: "boolean" }).default(false),
-});
+    // File tracking (for sync engine)
+    fileModifiedAt: text("file_modified_at"),
+    isMissing: integer("is_missing", { mode: "boolean" }).default(false),
+  },
+  (table) => [
+    index("idx_ia_missing_mtime").on(table.isMissing, table.fileModifiedAt),
+    index("idx_ia_rating").on(table.rating),
+    index("idx_ia_file_size").on(table.fileSize),
+    index("idx_ia_created_at").on(table.createdAt),
+    index("idx_ia_width").on(table.width),
+    index("idx_ia_height").on(table.height),
+    index("idx_ia_file_format").on(table.fileFormat),
+    index("idx_ia_aspect_ratio").on(table.aspectRatio),
+  ],
+);
 
 // Recycle Bin — snapshots of soft-deleted image_attributes rows
 export const trashedImages = sqliteTable("trashed_images", {
@@ -310,12 +329,19 @@ export const trashedImages = sqliteTable("trashed_images", {
   deletedAt: text("deleted_at").notNull().default(now),
 });
 
-export const imageTags = sqliteTable("image_tags", {
-  relativePath: text("relative_path").notNull(),
-  tagId: integer("tag_id")
-    .notNull()
-    .references(() => tags.id),
-});
+export const imageTags = sqliteTable(
+  "image_tags",
+  {
+    relativePath: text("relative_path").notNull(),
+    tagId: integer("tag_id")
+      .notNull()
+      .references(() => tags.id),
+  },
+  (table) => [
+    index("idx_imagetags_path").on(table.relativePath),
+    index("idx_imagetags_tag").on(table.tagId),
+  ],
+);
 
 export const collections = sqliteTable("collections", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -328,14 +354,21 @@ export const collections = sqliteTable("collections", {
   updatedAt: text("updated_at").default(now),
 });
 
-export const collectionImages = sqliteTable("collection_images", {
-  collectionId: integer("collection_id")
-    .notNull()
-    .references(() => collections.id, { onDelete: "cascade" }),
-  relativePath: text("relative_path").notNull(),
-  sortOrder: integer("sort_order").default(0),
-  addedAt: text("added_at").default(now),
-});
+export const collectionImages = sqliteTable(
+  "collection_images",
+  {
+    collectionId: integer("collection_id")
+      .notNull()
+      .references(() => collections.id, { onDelete: "cascade" }),
+    relativePath: text("relative_path").notNull(),
+    sortOrder: integer("sort_order").default(0),
+    addedAt: text("added_at").default(now),
+  },
+  (table) => [
+    index("idx_collectionimages_path").on(table.relativePath),
+    index("idx_collectionimages_collection").on(table.collectionId),
+  ],
+);
 
 // Danbooru Cache
 export const danbooruTagGroups = sqliteTable("danbooru_tag_groups", {
