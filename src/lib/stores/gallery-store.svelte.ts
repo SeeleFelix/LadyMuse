@@ -303,12 +303,14 @@ export function createGalleryStore(api: {
     const res = await fetch(
       `/api/comfyui/trash?page=${page}&pageSize=${trashPagination.pageSize}`,
     );
-    if (res.ok) {
-      const body = await res.json();
-      trashImages = body.items ?? [];
-      trashPagination = { ...trashPagination, page, total: body.total ?? 0 };
-      trashCount = body.total ?? 0;
+    if (!res.ok) {
+      console.warn(`[trash] list failed: ${res.status} ${res.statusText}`);
+      return;
     }
+    const body = await res.json();
+    trashImages = body.items ?? [];
+    trashPagination = { ...trashPagination, page, total: body.total ?? 0 };
+    trashCount = body.total ?? 0;
   }
 
   /**
