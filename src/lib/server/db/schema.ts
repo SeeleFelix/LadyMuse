@@ -294,6 +294,22 @@ export const imageAttributes = sqliteTable("image_attributes", {
   isMissing: integer("is_missing", { mode: "boolean" }).default(false),
 });
 
+// Recycle Bin — snapshots of soft-deleted image_attributes rows
+export const trashedImages = sqliteTable("trashed_images", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  originalRelativePath: text("original_relative_path").notNull(),
+  trashPath: text("trash_path").notNull(),
+  rating: integer("rating").default(0),
+  flag: text("flag"),
+  colorLabel: text("color_label"),
+  metadataJson: text("metadata_json"),
+  width: integer("width"),
+  height: integer("height"),
+  fileFormat: text("file_format"),
+  aspectRatio: text("aspect_ratio"),
+  deletedAt: text("deleted_at").notNull().default(now),
+});
+
 export const imageTags = sqliteTable("image_tags", {
   relativePath: text("relative_path").notNull(),
   tagId: integer("tag_id")

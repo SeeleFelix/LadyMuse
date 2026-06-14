@@ -120,6 +120,13 @@
       "when": 1780647163884,
       "tag": "0016_keen_kid_colt",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1781402624244,
+      "tag": "0017_sour_otto_octavius",
+      "breakpoints": true
     }
   ]
 }
