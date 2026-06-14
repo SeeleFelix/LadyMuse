@@ -60,6 +60,9 @@
   let mobileSheetVisible = $state(false);
   let mobileSheetImage = $state<ImageResult | null>(null);
 
+  // Mobile collection drawer state
+  let collectionDrawerMobileOpen = $state(false);
+
   // Delete confirmation state
   let deleteConfirm = $state<{
     paths: string[];
@@ -468,14 +471,47 @@
 <svelte:window />
 
 <div class="flex h-full bg-zinc-950 text-zinc-100">
-  <!-- Left: Collection panel -->
-  <CollectionPanel
-    {collections}
-    activeCollectionId={store.filters.collection?.collectionId ?? null}
-    onselect={handleSelectCollection}
-    oncreate={handleCreateCollection}
-    ondelete={handleDeleteCollection}
-  />
+  <!-- Left: Collection panel (desktop: always visible, mobile: drawer) -->
+  <div class="hidden md:block shrink-0">
+    <CollectionPanel
+      {collections}
+      activeCollectionId={store.filters.collection?.collectionId ?? null}
+      onselect={handleSelectCollection}
+      oncreate={handleCreateCollection}
+      ondelete={handleDeleteCollection}
+    />
+  </div>
+
+  <!-- Mobile collection drawer overlay -->
+  {#if collectionDrawerMobileOpen}
+    <button
+      class="fixed inset-0 z-40 bg-black/60 md:hidden"
+      onclick={() => (collectionDrawerMobileOpen = false)}
+      aria-label="关闭收藏集"
+    ></button>
+  {/if}
+
+  <!-- Mobile collection drawer panel -->
+  <div
+    class="fixed left-0 top-0 z-50 h-full w-56 md:hidden transition-transform duration-200 {collectionDrawerMobileOpen
+      ? 'translate-x-0'
+      : '-translate-x-full'}"
+  >
+    <CollectionPanel
+      {collections}
+      activeCollectionId={store.filters.collection?.collectionId ?? null}
+      onselect={(id) => {
+        handleSelectCollection(id);
+        collectionDrawerMobileOpen = false;
+      }}
+      oncreate={(name) => {
+        handleCreateCollection(name);
+      }}
+      ondelete={(id) => {
+        handleDeleteCollection(id);
+      }}
+    />
+  </div>
 
   <!-- Main content area -->
   <div class="flex-1 flex flex-col overflow-hidden">
@@ -487,6 +523,7 @@
         ontrashaction={handleTrashAction}
         onlongpress={handleLongPress}
         ondownload={handleDownload}
+        onopencollections={() => (collectionDrawerMobileOpen = true)}
       />
     {:else if store.viewMode === "inspect"}
       <InspectView
@@ -500,35 +537,37 @@
     {/if}
   </div>
 
-  <!-- Right detail panel (full height) -->
-  {#if store.viewMode !== "compare"}
-    <DetailPanel
-      image={store.activeImage}
-      {allTags}
-      onrate={(r: number) =>
-        store.activeImage &&
-        store.updateAttributes(store.activeImage.relativePath, { rating: r })}
-      oncolor={(c: string | null) =>
-        store.activeImage &&
-        store.updateAttributes(store.activeImage.relativePath, {
-          colorLabel: c,
-        })}
-      onflag={(f: string | null) =>
-        store.activeImage &&
-        store.updateAttributes(store.activeImage.relativePath, { flag: f })}
-      onaddtag={(_t: string) => {}}
-      onremovetag={(_id: number) => {}}
-      onclose={() => (store.activeImage = null)}
-      ondelete={() => {
-        if (store.activeImage) {
-          deleteConfirm = {
-            paths: [store.activeImage.relativePath],
-            message: `确定要删除 "${store.activeImage.relativePath.split("/").pop()}" 吗？`,
-          };
-        }
-      }}
-    />
-  {/if}
+  <!-- Right detail panel (desktop only, hidden on mobile) -->
+  <div class="hidden md:block">
+    {#if store.viewMode !== "compare"}
+      <DetailPanel
+        image={store.activeImage}
+        {allTags}
+        onrate={(r: number) =>
+          store.activeImage &&
+          store.updateAttributes(store.activeImage.relativePath, { rating: r })}
+        oncolor={(c: string | null) =>
+          store.activeImage &&
+          store.updateAttributes(store.activeImage.relativePath, {
+            colorLabel: c,
+          })}
+        onflag={(f: string | null) =>
+          store.activeImage &&
+          store.updateAttributes(store.activeImage.relativePath, { flag: f })}
+        onaddtag={(_t: string) => {}}
+        onremovetag={(_id: number) => {}}
+        onclose={() => (store.activeImage = null)}
+        ondelete={() => {
+          if (store.activeImage) {
+            deleteConfirm = {
+              paths: [store.activeImage.relativePath],
+              message: `确定要删除 "${store.activeImage.relativePath.split("/").pop()}" 吗？`,
+            };
+          }
+        }}
+      />
+    {/if}
+  </div>
 </div>
 
 <!-- Batch Actions Bar -->

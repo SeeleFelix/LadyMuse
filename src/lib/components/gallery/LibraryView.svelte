@@ -20,6 +20,7 @@
     ontrashaction,
     onlongpress,
     ondownload,
+    onopencollections,
   }: {
     store: GalleryStore;
     oncontextmenu?: (path: string, e: MouseEvent) => void;
@@ -30,6 +31,7 @@
     ) => void;
     onlongpress?: (path: string) => void;
     ondownload?: (path: string) => void;
+    onopencollections?: () => void;
   } = $props();
 
   let filterPanelOpen = $state(false);
@@ -106,6 +108,7 @@
       onrefresh={() => store.refresh()}
       onopentrash={() => store.setTrashView(true)}
       ontogglefilter={toggleFilter}
+      {onopencollections}
     />
 
     <!-- Filter bar (toggleable on mobile) -->
