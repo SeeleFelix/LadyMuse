@@ -298,7 +298,7 @@ export const imageAttributes = sqliteTable("image_attributes", {
 export const trashedImages = sqliteTable("trashed_images", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   originalRelativePath: text("original_relative_path").notNull(),
-  trashPath: text("trash_path").notNull(),
+  trashRelativePath: text("trash_relative_path").notNull(),
   rating: integer("rating").default(0),
   flag: text("flag"),
   colorLabel: text("color_label"),

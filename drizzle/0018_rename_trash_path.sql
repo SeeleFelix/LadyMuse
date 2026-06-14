@@ -1,0 +1,1 @@
+ALTER TABLE `trashed_images` RENAME COLUMN "trash_path" TO "trash_relative_path";
