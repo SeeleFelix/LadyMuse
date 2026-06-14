@@ -308,7 +308,7 @@
     }
 
     const body = await res.json();
-    showToast(`已删除 ${body.deleted} 张图片`, "success");
+    showToast(`已移入回收站 ${body.trashed} 张图片`, "success");
     store.deselectAll();
     store.refresh();
     deleteConfirm = null;
