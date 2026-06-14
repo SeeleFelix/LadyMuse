@@ -302,7 +302,15 @@
     }
 
     if (!res.ok) {
-      showToast("删除失败", "error");
+      const errBody = await res.json().catch(() => null);
+      const trashed = errBody?.trashed ?? 0;
+      if (trashed > 0) {
+        store.deselectAll();
+        store.refresh();
+        showToast(`${trashed} 张已移入回收站，其余删除失败`, "error");
+      } else {
+        showToast("删除失败", "error");
+      }
       deleteConfirm = null;
       return;
     }
