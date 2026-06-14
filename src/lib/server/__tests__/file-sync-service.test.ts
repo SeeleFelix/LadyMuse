@@ -484,11 +484,23 @@ describe("FileSyncService", () => {
       expect(records[0].isMissing).toBe(true);
     });
 
-    it("handleFileDeleted - broadcasts delete event", async () => {
+    it("handleFileDeleted - marks row missing and broadcasts when row exists", async () => {
       const service = new FileSyncService(testDir);
 
       const events: Array<{ type: string; path: string }> = [];
       service.subscribe((event) => events.push(event));
+
+      // Insert a row so the delete guard proceeds to mark missing + broadcast
+      await testDbClient.insert(schema.imageAttributes).values({
+        relativePath: "gone.png",
+        width: 512,
+        height: 512,
+        aspectRatio: "square",
+        fileFormat: "PNG",
+        fileSize: 1000,
+        fileModifiedAt: new Date().toISOString(),
+        isMissing: false,
+      });
 
       // @ts-expect-error - calling private method for test
       await service.handleFileDeleted(join(testDir, "gone.png"));
@@ -498,6 +510,36 @@ describe("FileSyncService", () => {
 
       expect(events).toHaveLength(1);
       expect(events[0]).toEqual({ type: "delete", path: "gone.png" });
+
+      const records = await testDbClient
+        .select()
+        .from(schema.imageAttributes)
+        .where(eq(schema.imageAttributes.relativePath, "gone.png"));
+
+      expect(records).toHaveLength(1);
+      expect(records[0].isMissing).toBe(true);
+    });
+
+    it("handleFileDeleted - does not broadcast when no row exists", async () => {
+      const service = new FileSyncService(testDir);
+
+      const events: Array<{ type: string; path: string }> = [];
+      service.subscribe((event) => events.push(event));
+
+      // @ts-expect-error - calling private method for test
+      await service.handleFileDeleted(join(testDir, "never-tracked.png"));
+
+      // Wait for debounce
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      expect(events.filter((e) => e.type === "delete")).toEqual([]);
+
+      const records = await testDbClient
+        .select()
+        .from(schema.imageAttributes)
+        .where(eq(schema.imageAttributes.relativePath, "never-tracked.png"));
+
+      expect(records).toHaveLength(0);
     });
   });
 

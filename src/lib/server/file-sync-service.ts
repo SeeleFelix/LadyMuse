@@ -165,6 +165,8 @@ export class FileSyncService {
     }
 
     this.debounceEvent("delete", filename, async () => {
+      // Skip when the row was already hard-deleted (e.g. by TrashService purge),
+      // so the watcher's unlink on the old path doesn't emit a spurious delete.
       const existing = await db
         .select({ relativePath: imageAttributes.relativePath })
         .from(imageAttributes)
