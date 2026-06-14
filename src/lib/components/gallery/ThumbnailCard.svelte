@@ -185,10 +185,15 @@
 
     <!-- Download button -->
     {#if !image.isMissing}
-      <button
+      <span
         onclick={handleDownload}
-        class="absolute top-1.5 right-1.5 w-7 h-7 rounded bg-black/60 hover:bg-black/80 text-zinc-300 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+        onkeydown={(e) => {
+          if (e.key === "Enter" || e.key === " ") handleDownload(e);
+        }}
+        class="absolute top-1.5 right-1.5 w-7 h-7 rounded bg-black/60 hover:bg-black/80 text-zinc-300 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
         title="下载"
+        role="button"
+        tabindex="0"
       >
         <svg
           class="w-4 h-4"
@@ -203,7 +208,7 @@
             d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
           />
         </svg>
-      </button>
+      </span>
     {/if}
   </div>
 
