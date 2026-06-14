@@ -155,7 +155,7 @@
   let contextMenuImageResult = $derived(
     contextMenuImage
       ? (store.images.find(
-          (img) => img.relativePath === contextMenuImage.relativePath,
+          (img) => img.relativePath === contextMenuImage!.relativePath,
         ) ?? null)
       : null,
   );
@@ -606,7 +606,7 @@
     <button
       onclick={() => {
         mobileSheetVisible = false;
-        openLightboxForImage(mobileSheetImage);
+        openLightboxForImage(mobileSheetImage!);
       }}
       class="flex items-center gap-3 w-full px-1 py-3 text-sm text-zinc-200 border-b border-zinc-700/50"
     >
@@ -658,7 +658,7 @@
           <button
             onclick={() => {
               store.updateAttributes(mobileSheetImage!.relativePath, {
-                colorLabel: mobileSheetImage.colorLabel === key ? null : key,
+                colorLabel: mobileSheetImage!.colorLabel === key ? null : key,
               });
               mobileSheetVisible = false;
             }}
@@ -757,7 +757,7 @@
     <button
       onclick={() => {
         mobileSheetVisible = false;
-        handleDeleteSingle(mobileSheetImage);
+        handleDeleteSingle(mobileSheetImage!);
       }}
       class="flex items-center gap-3 w-full px-1 py-3 text-sm text-red-400"
     >
