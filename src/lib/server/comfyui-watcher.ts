@@ -1,10 +1,10 @@
-import { getFileSyncService } from "./file-sync-service";
+import { getFileSyncService, type FileEvent } from "./file-sync-service";
 
 type Subscriber = (path: string) => void;
 
 export function subscribe(fn: Subscriber): () => void {
-  const wrappedFn = (event: { type: string; path: string }) => {
-    fn(event.path);
+  const wrappedFn = (event: FileEvent) => {
+    if ("path" in event) fn(event.path);
   };
 
   let cancelled = false;

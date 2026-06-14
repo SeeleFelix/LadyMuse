@@ -30,7 +30,7 @@ vi.mock("../db", () => ({
 }));
 
 // Import FileSyncService after mocking is set up
-import { FileSyncService } from "../file-sync-service";
+import { FileSyncService, type FileEvent } from "../file-sync-service";
 
 beforeEach(async () => {
   // Create test directory
@@ -98,7 +98,7 @@ describe("FileSyncService", () => {
     it("broadcast - subscribers receive events", () => {
       const service = new FileSyncService(testDir);
 
-      const events: Array<{ type: string; path: string }> = [];
+      const events: FileEvent[] = [];
       const unsubscribe = service.subscribe((event) => {
         events.push(event);
       });
@@ -114,8 +114,8 @@ describe("FileSyncService", () => {
     it("subscribe - multiple subscribers all receive events", () => {
       const service = new FileSyncService(testDir);
 
-      const events1: Array<{ type: string; path: string }> = [];
-      const events2: Array<{ type: string; path: string }> = [];
+      const events1: FileEvent[] = [];
+      const events2: FileEvent[] = [];
 
       service.subscribe((event) => events1.push(event));
       service.subscribe((event) => events2.push(event));
@@ -131,7 +131,7 @@ describe("FileSyncService", () => {
     it("subscribe - unsubscribe removes subscriber", () => {
       const service = new FileSyncService(testDir);
 
-      const events: Array<{ type: string; path: string }> = [];
+      const events: FileEvent[] = [];
       const unsubscribe = service.subscribe((event) => events.push(event));
 
       unsubscribe();
@@ -146,7 +146,7 @@ describe("FileSyncService", () => {
     it("debounce - rapid handleFileAdded calls result in single broadcast", async () => {
       const service = new FileSyncService(testDir, { debounceMs: 100 });
 
-      const events: Array<{ type: string; path: string }> = [];
+      const events: FileEvent[] = [];
       service.subscribe((event) => events.push(event));
 
       // Create test file
@@ -171,7 +171,7 @@ describe("FileSyncService", () => {
     it("debounce - different files are tracked separately", async () => {
       const service = new FileSyncService(testDir, { debounceMs: 100 });
 
-      const events: Array<{ type: string; path: string }> = [];
+      const events: FileEvent[] = [];
       service.subscribe((event) => events.push(event));
 
       // Create two different files
@@ -194,14 +194,17 @@ describe("FileSyncService", () => {
       // Should have exactly 2 events (one per file)
       expect(events).toHaveLength(2);
 
-      const paths = events.map((e) => e.path).sort();
+      const paths = events
+        .filter((e): e is Extract<FileEvent, { path: string }> => "path" in e)
+        .map((e) => e.path)
+        .sort();
       expect(paths).toEqual(["file1.png", "file2.png"]);
     });
 
     it("debounce - handleFileChanged also debounces", async () => {
       const service = new FileSyncService(testDir, { debounceMs: 100 });
 
-      const events: Array<{ type: string; path: string }> = [];
+      const events: FileEvent[] = [];
       service.subscribe((event) => events.push(event));
 
       // Create test file and add it to DB first
@@ -240,7 +243,7 @@ describe("FileSyncService", () => {
     it("debounce - handleFileDeleted also debounces", async () => {
       const service = new FileSyncService(testDir, { debounceMs: 100 });
 
-      const events: Array<{ type: string; path: string }> = [];
+      const events: FileEvent[] = [];
       service.subscribe((event) => events.push(event));
 
       // Insert record for a "deleted" file
@@ -355,7 +358,7 @@ describe("FileSyncService", () => {
     it("handleFileAdded - broadcasts add event", async () => {
       const service = new FileSyncService(testDir);
 
-      const events: Array<{ type: string; path: string }> = [];
+      const events: FileEvent[] = [];
       service.subscribe((event) => events.push(event));
 
       // Create test file
@@ -422,7 +425,7 @@ describe("FileSyncService", () => {
     it("handleFileChanged - broadcasts modify event", async () => {
       const service = new FileSyncService(testDir);
 
-      const events: Array<{ type: string; path: string }> = [];
+      const events: FileEvent[] = [];
       service.subscribe((event) => events.push(event));
 
       // Create test file and add it first (so it exists in DB)
@@ -487,7 +490,7 @@ describe("FileSyncService", () => {
     it("handleFileDeleted - marks row missing and broadcasts when row exists", async () => {
       const service = new FileSyncService(testDir);
 
-      const events: Array<{ type: string; path: string }> = [];
+      const events: FileEvent[] = [];
       service.subscribe((event) => events.push(event));
 
       // Insert a row so the delete guard proceeds to mark missing + broadcast
@@ -523,7 +526,7 @@ describe("FileSyncService", () => {
     it("handleFileDeleted - does not broadcast when no row exists", async () => {
       const service = new FileSyncService(testDir);
 
-      const events: Array<{ type: string; path: string }> = [];
+      const events: FileEvent[] = [];
       service.subscribe((event) => events.push(event));
 
       // @ts-expect-error - calling private method for test

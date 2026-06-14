@@ -9,7 +9,12 @@ import { getOutputDir } from "./comfyui-browser";
 
 const SUPPORTED_FORMATS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 
-export type FileEvent = { type: "add" | "delete" | "modify"; path: string };
+export type FileEvent =
+  | { type: "add" | "delete" | "modify"; path: string }
+  | { type: "trash"; path: string; trashId: number }
+  | { type: "restore"; path: string; renamed: boolean }
+  | { type: "purge"; trashId: number }
+  | { type: "empty" };
 
 export type Subscriber = (event: FileEvent) => void;
 
@@ -352,5 +357,29 @@ export async function getFileSyncService(
 export function broadcastDeletion(path: string): void {
   instancePromise?.then((instance) => {
     instance?.broadcast({ type: "delete", path });
+  });
+}
+
+export function broadcastTrash(path: string, trashId: number): void {
+  instancePromise?.then((instance) => {
+    instance?.broadcast({ type: "trash", path, trashId });
+  });
+}
+
+export function broadcastRestore(path: string, renamed: boolean): void {
+  instancePromise?.then((instance) => {
+    instance?.broadcast({ type: "restore", path, renamed });
+  });
+}
+
+export function broadcastPurge(trashId: number): void {
+  instancePromise?.then((instance) => {
+    instance?.broadcast({ type: "purge", trashId });
+  });
+}
+
+export function broadcastEmpty(): void {
+  instancePromise?.then((instance) => {
+    instance?.broadcast({ type: "empty" });
   });
 }

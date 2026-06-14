@@ -1,5 +1,8 @@
 import type { RequestHandler } from "./$types";
-import { getFileSyncService } from "$lib/server/file-sync-service";
+import {
+  getFileSyncService,
+  type FileEvent,
+} from "$lib/server/file-sync-service";
 
 export const GET: RequestHandler = async ({ request }) => {
   const service = await getFileSyncService();
@@ -13,7 +16,7 @@ export const GET: RequestHandler = async ({ request }) => {
     start(controller) {
       const encoder = new TextEncoder();
 
-      const send = (event: { type: string; path: string }) => {
+      const send = (event: FileEvent) => {
         try {
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
