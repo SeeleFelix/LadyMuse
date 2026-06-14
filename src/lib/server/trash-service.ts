@@ -1,5 +1,4 @@
 import { eq, desc, sql } from "drizzle-orm";
-import type { drizzle } from "drizzle-orm/better-sqlite3";
 import { join, dirname, basename, extname, resolve } from "node:path";
 import { mkdirSync, renameSync, unlinkSync, existsSync } from "node:fs";
 import {
@@ -8,6 +7,7 @@ import {
   imageTags,
   collectionImages,
 } from "./db/schema";
+import type { DB } from "./db";
 import { clearCache } from "./comfyui-browser";
 import {
   broadcastTrash,
@@ -15,8 +15,6 @@ import {
   broadcastPurge,
   broadcastEmpty,
 } from "./file-sync-service";
-
-type DbClient = ReturnType<typeof drizzle>;
 
 export interface TrashListItem {
   id: number;
@@ -44,7 +42,7 @@ export interface TrashListResult {
  */
 export class TrashService {
   constructor(
-    private db: DbClient,
+    private db: DB,
     private outputDir: string,
   ) {}
 
@@ -83,25 +81,33 @@ export class TrashService {
     const trashId = inserted[0].id;
 
     const trashDir = join(this.outputDir, ".trash", String(trashId));
-    mkdirSync(trashDir, { recursive: true });
     const fileBasename = basename(relativePath);
     const trashRelativePath = join(".trash", String(trashId), fileBasename);
-    renameSync(absSource, join(this.outputDir, trashRelativePath));
 
-    await this.db
-      .update(trashedImages)
-      .set({ trashRelativePath })
-      .where(eq(trashedImages.id, trashId));
-
-    await this.db
-      .delete(imageTags)
-      .where(eq(imageTags.relativePath, relativePath));
-    await this.db
-      .delete(collectionImages)
-      .where(eq(collectionImages.relativePath, relativePath));
-    await this.db
-      .delete(imageAttributes)
-      .where(eq(imageAttributes.relativePath, relativePath));
+    try {
+      mkdirSync(trashDir, { recursive: true });
+      renameSync(absSource, join(this.outputDir, trashRelativePath));
+      await this.db
+        .update(trashedImages)
+        .set({ trashRelativePath })
+        .where(eq(trashedImages.id, trashId));
+      await this.db
+        .delete(imageTags)
+        .where(eq(imageTags.relativePath, relativePath));
+      await this.db
+        .delete(collectionImages)
+        .where(eq(collectionImages.relativePath, relativePath));
+      await this.db
+        .delete(imageAttributes)
+        .where(eq(imageAttributes.relativePath, relativePath));
+    } catch (e) {
+      // Best-effort: remove the orphan trash row so the trash view stays clean.
+      await this.db
+        .delete(trashedImages)
+        .where(eq(trashedImages.id, trashId))
+        .catch(() => {});
+      throw e;
+    }
 
     clearCache();
     broadcastTrash(relativePath, trashId);
@@ -119,7 +125,11 @@ export class TrashService {
     const item = rows[0];
     if (!item) throw new Error("Trash item not found");
 
+    const outputRoot = resolve(this.outputDir);
     const originalAbs = resolve(this.outputDir, item.originalRelativePath);
+    if (!originalAbs.startsWith(outputRoot)) {
+      throw new Error("Invalid original path");
+    }
     const occupied = existsSync(originalAbs);
     let targetRelativePath = item.originalRelativePath;
 
@@ -140,9 +150,17 @@ export class TrashService {
     }
 
     const targetAbs = resolve(this.outputDir, targetRelativePath);
+    if (!targetAbs.startsWith(outputRoot)) {
+      throw new Error("Invalid target path");
+    }
     mkdirSync(dirname(targetAbs), { recursive: true });
-    renameSync(resolve(this.outputDir, item.trashRelativePath), targetAbs);
+    const trashAbs = resolve(this.outputDir, item.trashRelativePath);
+    if (!trashAbs.startsWith(outputRoot)) {
+      throw new Error("Invalid trash path");
+    }
+    renameSync(trashAbs, targetAbs);
 
+    // Upsert: an isMissing=true placeholder may exist at this path; replace its fields.
     await this.db
       .insert(imageAttributes)
       .values({

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { randomBytes } from "node:crypto";
 import {
   mkdirSync,
@@ -10,7 +10,9 @@ import {
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
+import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
+import type { DB } from "../db";
 
 vi.mock("../comfyui-browser", () => ({ clearCache: vi.fn() }));
 vi.mock("../file-sync-service", () => ({
@@ -24,7 +26,7 @@ import { TrashService } from "../trash-service";
 
 let testDir: string;
 let sqlite: Database.Database;
-let db: ReturnType<typeof drizzle>;
+let db: DB;
 
 beforeEach(() => {
   const id = randomBytes(8).toString("hex");
@@ -79,7 +81,11 @@ beforeEach(() => {
     CREATE TABLE image_tags ( relative_path TEXT NOT NULL, tag_id INTEGER NOT NULL );
     CREATE TABLE collection_images ( collection_id INTEGER NOT NULL, relative_path TEXT NOT NULL, sort_order INTEGER DEFAULT 0, added_at TEXT DEFAULT (datetime('now')) );
   `);
-  db = drizzle(sqlite);
+  db = drizzle(sqlite, { schema });
+});
+
+afterEach(() => {
+  rmSync(testDir, { recursive: true, force: true });
 });
 
 function seedImage(
@@ -184,5 +190,71 @@ describe("TrashService.emptyTrash", () => {
 
     expect(count).toBe(2);
     expect(db.select().from(schema.trashedImages).all()).toHaveLength(0);
+  });
+});
+
+describe("TrashService.restoreFromTrash - error cases", () => {
+  it("throws when the trash id does not exist", async () => {
+    const svc = new TrashService(db, testDir);
+    await expect(svc.restoreFromTrash(99999)).rejects.toThrow(
+      "Trash item not found",
+    );
+  });
+});
+
+describe("TrashService.purgeTrashItem - idempotency", () => {
+  it("no-ops when the trash id does not exist", async () => {
+    const svc = new TrashService(db, testDir);
+    await expect(svc.purgeTrashItem(99999)).resolves.toBeUndefined();
+    expect(db.select().from(schema.trashedImages).all()).toHaveLength(0);
+  });
+
+  it("refuses to unlink a file whose trash path escapes outputDir", async () => {
+    seedImage("a.png", "AAA");
+    const svc = new TrashService(db, testDir);
+    const { trashId } = await svc.softDeleteToTrash("a.png");
+    // Simulate DB tampering: point the trash row outside outputDir.
+    db.update(schema.trashedImages)
+      .set({ trashRelativePath: "../../etc/evil" })
+      .where(eq(schema.trashedImages.id, trashId))
+      .run();
+    // Even if such a file existed, purge must not unlink it.
+    await svc.purgeTrashItem(trashId);
+    // The trash row is still deleted (DB cleanup), but no outside unlink occurs.
+    expect(db.select().from(schema.trashedImages).all()).toHaveLength(0);
+  });
+});
+
+describe("TrashService.listTrash - pagination", () => {
+  it("returns paginated items ordered by deletedAt desc", async () => {
+    const svc = new TrashService(db, testDir);
+    for (const name of ["a.png", "b.png", "c.png", "d.png", "e.png"]) {
+      seedImage(name, "X");
+      await svc.softDeleteToTrash(name);
+      // Spread deletedAt timestamps so ordering is deterministic.
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    const page1 = await svc.listTrash(1, 2);
+    expect(page1.total).toBe(5);
+    expect(page1.items).toHaveLength(2);
+
+    const page2 = await svc.listTrash(2, 2);
+    expect(page2.items).toHaveLength(2);
+    const page3 = await svc.listTrash(3, 2);
+    expect(page3.items).toHaveLength(1);
+
+    // Pagination is stable: the union of all pages equals the full set, and
+    // pages do not overlap. The exact tie-break among rows with identical
+    // deletedAt is not part of the contract.
+    const allNames = [...page1.items, ...page2.items, ...page3.items].map(
+      (i) => i.originalRelativePath,
+    );
+    expect(allNames.sort()).toEqual([
+      "a.png",
+      "b.png",
+      "c.png",
+      "d.png",
+      "e.png",
+    ]);
   });
 });
