@@ -13,6 +13,8 @@
     onloadmore,
     hasMore = false,
     loadingMore = false,
+    onlongpress,
+    ondownload,
   }: {
     images: ImageResult[];
     selectedPaths: Set<string>;
@@ -23,6 +25,8 @@
     onloadmore: () => void;
     hasMore?: boolean;
     loadingMore?: boolean;
+    onlongpress?: (path: string) => void;
+    ondownload?: (path: string) => void;
   } = $props();
 
   let sentinelEl: HTMLDivElement | undefined;
@@ -58,7 +62,7 @@
 </script>
 
 <div
-  class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3"
+  class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-3"
 >
   {#each images as image (image.relativePath)}
     <ThumbnailCard
@@ -68,6 +72,8 @@
       {onselect}
       ondblclick={() => ondblclick(image.relativePath)}
       {oncontextmenu}
+      {onlongpress}
+      {ondownload}
     />
   {/each}
 </div>
