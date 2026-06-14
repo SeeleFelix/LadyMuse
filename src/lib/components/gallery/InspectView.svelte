@@ -15,10 +15,12 @@
     store,
     allTags = [],
     oncontextmenu,
+    ondownload,
   }: {
     store: GalleryStore;
     allTags?: Tag[];
     oncontextmenu?: (path: string, e: MouseEvent) => void;
+    ondownload?: (imageUrl: string, filename: string) => void;
   } = $props();
 
   let zoom = $state(1);
@@ -160,6 +162,36 @@
             </svg>
             返回
           </button>
+
+          {#if store.activeImage && !store.activeImage.isMissing}
+            <button
+              onclick={() => {
+                const img = store.activeImage!;
+                const filename = img.relativePath.split("/").pop() || "image";
+                ondownload?.(
+                  `/api/comfyui/images/${encodeURIComponent(img.relativePath)}`,
+                  filename,
+                );
+              }}
+              class="text-zinc-400 hover:text-zinc-200 text-xs px-2 py-1 rounded hover:bg-zinc-800 flex items-center gap-1"
+              title="下载"
+            >
+              <svg
+                class="w-3.5 h-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                />
+              </svg>
+            </button>
+          {/if}
+
           <span class="text-xs text-zinc-500">
             {currentIndex >= 0 ? currentIndex + 1 : 0} / {store.images.length}
           </span>
