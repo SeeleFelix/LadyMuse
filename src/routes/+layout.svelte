@@ -3,6 +3,7 @@
 
   let { children } = $props();
   let sidebarOpen = $state(true);
+  let mobileMenuOpen = $state(false);
 
   const navItems = [
     { href: "/", label: "首页", icon: "◉" },
@@ -20,20 +21,67 @@
 </script>
 
 <div class="flex h-screen bg-zinc-950 text-zinc-100">
+  <!-- Mobile overlay backdrop -->
+  {#if mobileMenuOpen}
+    <button
+      class="fixed inset-0 z-40 bg-black/60 md:hidden"
+      onclick={() => (mobileMenuOpen = false)}
+      aria-label="关闭菜单"
+    ></button>
+  {/if}
+
+  <!-- Mobile hamburger button -->
+  <button
+    class="fixed top-3 left-3 z-50 p-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-zinc-100 md:hidden"
+    onclick={() => (mobileMenuOpen = true)}
+    aria-label="打开菜单"
+  >
+    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M4 6h16M4 12h16M4 18h16"
+      />
+    </svg>
+  </button>
+
   <aside
-    class="flex flex-col border-r border-zinc-800 bg-zinc-900 transition-all duration-200 {sidebarOpen
-      ? 'w-56'
-      : 'w-14'}"
+    class="flex-col border-r border-zinc-800 bg-zinc-900 transition-all duration-200
+      hidden md:flex
+      {sidebarOpen ? 'md:w-56' : 'md:w-14'}
+      {mobileMenuOpen ? 'fixed left-0 top-0 z-50 h-full w-56 flex' : ''}"
   >
     <div
       class="flex h-14 items-center justify-between border-b border-zinc-800 px-4"
     >
-      {#if sidebarOpen}
+      {#if sidebarOpen || mobileMenuOpen}
         <span class="text-lg font-bold text-violet-400">LadyMuse</span>
       {/if}
+      <!-- Mobile close button -->
+      <button
+        onclick={() => (mobileMenuOpen = false)}
+        class="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors md:hidden"
+        aria-label="关闭菜单"
+      >
+        <svg
+          class="w-4 h-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M6 18L18 6M6 6l12 12"
+          />
+        </svg>
+      </button>
+      <!-- Desktop toggle -->
       <button
         onclick={() => (sidebarOpen = !sidebarOpen)}
-        class="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+        class="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors hidden md:block"
         title={sidebarOpen ? "收起菜单" : "展开菜单"}
       >
         <svg
@@ -65,10 +113,11 @@
       {#each navItems as item}
         <a
           href={item.href}
+          onclick={() => (mobileMenuOpen = false)}
           class="flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
         >
           <span class="text-base">{item.icon}</span>
-          {#if sidebarOpen}
+          {#if sidebarOpen || mobileMenuOpen}
             <span>{item.label}</span>
           {/if}
         </a>
@@ -76,7 +125,7 @@
     </nav>
   </aside>
 
-  <main class="flex-1 overflow-y-auto overflow-x-hidden">
+  <main class="flex-1 overflow-y-auto overflow-x-hidden pt-12 md:pt-0">
     {@render children()}
   </main>
 </div>

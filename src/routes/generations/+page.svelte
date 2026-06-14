@@ -11,9 +11,11 @@
   import Toast from "$lib/components/gallery/Toast.svelte";
   import Lightbox from "$lib/components/gallery/Lightbox.svelte";
   import ContextMenu from "$lib/components/gallery/ContextMenu.svelte";
+  import MobileActionSheet from "$lib/components/gallery/MobileActionSheet.svelte";
   import ConfirmDialog from "$lib/components/gallery/ConfirmDialog.svelte";
   import CollectionPanel from "$lib/components/gallery/CollectionPanel.svelte";
   import DetailPanel from "$lib/components/gallery/DetailPanel.svelte";
+  import { downloadImage } from "$lib/utils/download-image";
   import type { ImageResult } from "$lib/stores/gallery-store.svelte";
 
   interface Collection {
@@ -54,6 +56,10 @@
   let contextMenuY = $state(0);
   let contextMenuImage = $state<ImageResult | null>(null);
 
+  // Mobile action sheet state
+  let mobileSheetVisible = $state(false);
+  let mobileSheetImage = $state<ImageResult | null>(null);
+
   // Delete confirmation state
   let deleteConfirm = $state<{
     paths: string[];
@@ -79,6 +85,63 @@
     toasts = toasts.filter((t) => t.id !== id);
   }
 
+  function getImageUrl(image: ImageResult): string {
+    return `/api/comfyui/images/${encodeURIComponent(image.relativePath)}`;
+  }
+
+  function getFilename(image: ImageResult): string {
+    return image.relativePath.split("/").pop() || image.relativePath;
+  }
+
+  // Download handlers
+  async function handleDownload(path: string) {
+    const image = store.images.find((img) => img.relativePath === path);
+    if (!image || image.isMissing) return;
+    try {
+      await downloadImage(getImageUrl(image), getFilename(image));
+    } catch {
+      showToast("下载失败", "error");
+    }
+  }
+
+  async function handleLightboxDownload(imageUrl: string, filename: string) {
+    try {
+      await downloadImage(imageUrl, filename);
+    } catch {
+      showToast("下载失败", "error");
+    }
+  }
+
+  // Long-press handler → opens mobile action sheet
+  function handleLongPress(path: string) {
+    const image = store.images.find((img) => img.relativePath === path);
+    if (!image) return;
+    if (store.selectedPaths.size > 1 && store.selectedPaths.has(path)) {
+      mobileSheetImage = null;
+    } else {
+      store.select(path, false, false);
+      mobileSheetImage = image;
+    }
+    mobileSheetVisible = true;
+  }
+
+  function openLightboxForImage(img: ImageResult) {
+    const idx = store.images.findIndex(
+      (i) => i.relativePath === img.relativePath,
+    );
+    if (idx >= 0) {
+      lightboxIndex = idx;
+      lightboxOpen = true;
+    }
+  }
+
+  function handleDeleteSingle(img: ImageResult) {
+    deleteConfirm = {
+      paths: [img.relativePath],
+      message: `确定要删除 "${img.relativePath.split("/").pop()}" 吗？`,
+    };
+  }
+
   // Get lightbox images from store
   let lightboxImages = $derived(
     store.images.map((img) => ({
@@ -92,7 +155,7 @@
   let contextMenuImageResult = $derived(
     contextMenuImage
       ? (store.images.find(
-          (img) => img.relativePath === contextMenuImage.relativePath,
+          (img) => img.relativePath === contextMenuImage!.relativePath,
         ) ?? null)
       : null,
   );
@@ -422,9 +485,16 @@
         {allTags}
         oncontextmenu={handleContextMenu}
         ontrashaction={handleTrashAction}
+        onlongpress={handleLongPress}
+        ondownload={handleDownload}
       />
     {:else if store.viewMode === "inspect"}
-      <InspectView {store} {allTags} oncontextmenu={handleContextMenu} />
+      <InspectView
+        {store}
+        {allTags}
+        oncontextmenu={handleContextMenu}
+        ondownload={handleLightboxDownload}
+      />
     {:else if store.viewMode === "compare"}
       <CompareView {store} {allTags} />
     {/if}
@@ -501,10 +571,11 @@
     onclose={() => (lightboxOpen = false)}
     onnavigate={handleLightboxNavigate}
     oncontextmenu={handleLightboxContextmenu}
+    ondownload={handleLightboxDownload}
   />
 {/if}
 
-<!-- Context Menu -->
+<!-- Context Menu (desktop) -->
 {#if contextMenuVisible && contextMenuImageResult}
   <ContextMenu
     x={contextMenuX}
@@ -524,6 +595,240 @@
     ondelete={contextMenuDelete}
   />
 {/if}
+
+<!-- Mobile Action Sheet -->
+<MobileActionSheet
+  visible={mobileSheetVisible}
+  onclose={() => (mobileSheetVisible = false)}
+>
+  {#if mobileSheetImage}
+    <!-- Single image actions -->
+    <button
+      onclick={() => {
+        mobileSheetVisible = false;
+        openLightboxForImage(mobileSheetImage!);
+      }}
+      class="flex items-center gap-3 w-full px-1 py-3 text-sm text-zinc-200 border-b border-zinc-700/50"
+    >
+      <svg
+        class="w-5 h-5 text-zinc-400"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"
+        />
+      </svg>
+      查看大图
+    </button>
+
+    <!-- Rate -->
+    <div
+      class="flex items-center gap-3 w-full px-1 py-3 text-sm text-zinc-200 border-b border-zinc-700/50"
+    >
+      <span class="text-zinc-500 text-xs w-5 text-center">★</span>
+      <div class="flex gap-1">
+        {#each [1, 2, 3, 4, 5] as r}
+          <button
+            onclick={() => {
+              store.updateAttributes(mobileSheetImage!.relativePath, {
+                rating: r,
+              });
+              mobileSheetVisible = false;
+            }}
+            class="text-lg {r <= (mobileSheetImage.rating ?? 0)
+              ? 'text-amber-400'
+              : 'text-zinc-600'}">★</button
+          >
+        {/each}
+      </div>
+    </div>
+
+    <!-- Color -->
+    <div
+      class="flex items-center gap-3 w-full px-1 py-3 text-sm text-zinc-200 border-b border-zinc-700/50"
+    >
+      <span class="text-zinc-500 text-xs w-5 text-center">●</span>
+      <div class="flex gap-2">
+        {#each [["red", "bg-red-500"], ["yellow", "bg-yellow-500"], ["green", "bg-green-500"], ["blue", "bg-blue-500"], ["purple", "bg-purple-500"]] as [key, cls]}
+          <button
+            onclick={() => {
+              store.updateAttributes(mobileSheetImage!.relativePath, {
+                colorLabel: mobileSheetImage!.colorLabel === key ? null : key,
+              });
+              mobileSheetVisible = false;
+            }}
+            class="w-6 h-6 rounded-full {cls} {mobileSheetImage.colorLabel ===
+            key
+              ? 'ring-2 ring-white'
+              : ''}"
+          ></button>
+        {/each}
+      </div>
+    </div>
+
+    <!-- Flag -->
+    <div
+      class="flex items-center gap-3 w-full px-1 py-3 text-sm text-zinc-200 border-b border-zinc-700/50"
+    >
+      <span class="text-zinc-500 text-xs w-5 text-center">⚑</span>
+      <div class="flex gap-2">
+        <button
+          onclick={() => {
+            store.updateAttributes(mobileSheetImage!.relativePath, {
+              flag: "pick",
+            });
+            mobileSheetVisible = false;
+          }}
+          class="px-3 py-1 rounded text-xs {mobileSheetImage.flag === 'pick'
+            ? 'bg-green-500/20 text-green-400'
+            : 'text-zinc-400 border border-zinc-700'}">Pick</button
+        >
+        <button
+          onclick={() => {
+            store.updateAttributes(mobileSheetImage!.relativePath, {
+              flag: "reject",
+            });
+            mobileSheetVisible = false;
+          }}
+          class="px-3 py-1 rounded text-xs {mobileSheetImage.flag === 'reject'
+            ? 'bg-red-500/20 text-red-400'
+            : 'text-zinc-400 border border-zinc-700'}">Reject</button
+        >
+      </div>
+    </div>
+
+    <!-- Copy link -->
+    <button
+      onclick={() => {
+        navigator.clipboard.writeText(
+          `${window.location.origin}/api/comfyui/images/${encodeURIComponent(mobileSheetImage!.relativePath)}`,
+        );
+        mobileSheetVisible = false;
+        showToast("链接已复制", "success");
+      }}
+      class="flex items-center gap-3 w-full px-1 py-3 text-sm text-zinc-200 border-b border-zinc-700/50"
+    >
+      <svg
+        class="w-5 h-5 text-zinc-400"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+        />
+      </svg>
+      复制链接
+    </button>
+
+    <!-- Download -->
+    <button
+      onclick={() => {
+        handleDownload(mobileSheetImage!.relativePath);
+        mobileSheetVisible = false;
+      }}
+      class="flex items-center gap-3 w-full px-1 py-3 text-sm text-zinc-200 border-b border-zinc-700/50"
+    >
+      <svg
+        class="w-5 h-5 text-zinc-400"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+        />
+      </svg>
+      下载
+    </button>
+
+    <!-- Delete -->
+    <button
+      onclick={() => {
+        mobileSheetVisible = false;
+        handleDeleteSingle(mobileSheetImage!);
+      }}
+      class="flex items-center gap-3 w-full px-1 py-3 text-sm text-red-400"
+    >
+      <svg
+        class="w-5 h-5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+        />
+      </svg>
+      删除
+    </button>
+  {:else}
+    <!-- Multi-select actions -->
+    <div class="px-1 py-3 text-sm text-zinc-500 border-b border-zinc-700/50">
+      {store.selectedPaths.size} 张已选
+    </div>
+
+    <!-- Rate batch -->
+    <div
+      class="flex items-center gap-3 w-full px-1 py-3 text-sm text-zinc-200 border-b border-zinc-700/50"
+    >
+      <span class="text-zinc-500 text-xs w-5 text-center">★</span>
+      <div class="flex gap-1">
+        {#each [1, 2, 3, 4, 5] as r}
+          <button
+            onclick={() => {
+              for (const path of store.selectedPaths)
+                store.updateAttributes(path, { rating: r });
+              mobileSheetVisible = false;
+            }}
+            class="text-lg text-amber-400">★</button
+          >
+        {/each}
+      </div>
+    </div>
+
+    <!-- Batch delete -->
+    <button
+      onclick={() => {
+        mobileSheetVisible = false;
+        deleteConfirm = {
+          paths: [...store.selectedPaths],
+          message: `确定要删除 ${store.selectedPaths.size} 张图片？`,
+        };
+      }}
+      class="flex items-center gap-3 w-full px-1 py-3 text-sm text-red-400"
+    >
+      <svg
+        class="w-5 h-5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+        />
+      </svg>
+      删除 ({store.selectedPaths.size})
+    </button>
+  {/if}
+</MobileActionSheet>
 
 <!-- Delete Confirmation -->
 {#if deleteConfirm}

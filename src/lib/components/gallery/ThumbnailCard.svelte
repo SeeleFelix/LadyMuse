@@ -8,6 +8,8 @@
     onselect,
     ondblclick,
     oncontextmenu,
+    onlongpress,
+    ondownload,
   }: {
     image: ImageResult;
     selected?: boolean;
@@ -15,6 +17,8 @@
     onselect: (path: string, e: MouseEvent) => void;
     ondblclick: () => void;
     oncontextmenu: (path: string, e: MouseEvent) => void;
+    onlongpress?: (path: string) => void;
+    ondownload?: (path: string) => void;
   } = $props();
 
   const colorClassMap: Record<string, string> = {
@@ -25,6 +29,9 @@
     purple: "bg-purple-500",
   };
 
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let touchStartPos = { x: 0, y: 0 };
+
   function getImageUrl(): string {
     return `/api/comfyui/images/${encodeURIComponent(image.relativePath)}`;
   }
@@ -32,12 +39,50 @@
   function getFilename(): string {
     return image.relativePath.split("/").pop() || image.relativePath;
   }
+
+  function handleTouchStart(e: TouchEvent) {
+    const touch = e.touches[0];
+    if (!touch) return;
+    touchStartPos = { x: touch.clientX, y: touch.clientY };
+    longPressTimer = setTimeout(() => {
+      onlongpress?.(image.relativePath);
+    }, 500);
+  }
+
+  function handleTouchMove(e: TouchEvent) {
+    const touch = e.touches[0];
+    if (!touch) return;
+    const dx = Math.abs(touch.clientX - touchStartPos.x);
+    const dy = Math.abs(touch.clientY - touchStartPos.y);
+    if (dx > 10 || dy > 10) {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    }
+  }
+
+  function handleTouchEnd() {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  }
+
+  function handleDownload(e: Event) {
+    e.stopPropagation();
+    e.preventDefault();
+    ondownload?.(image.relativePath);
+  }
 </script>
 
 <button
   onclick={(e) => onselect(image.relativePath, e)}
   {ondblclick}
   oncontextmenu={(e) => oncontextmenu(image.relativePath, e)}
+  ontouchstart={handleTouchStart}
+  ontouchmove={handleTouchMove}
+  ontouchend={handleTouchEnd}
   tabindex="0"
   class="group relative rounded-lg border {selected
     ? 'border-violet-500 ring-1 ring-violet-500/30'
@@ -80,7 +125,7 @@
 
     {#if image.colorLabel}
       <div
-        class="absolute top-1.5 right-1.5 w-3 h-3 rounded-full {colorClassMap[
+        class="absolute top-2 right-8 w-3 h-3 rounded-full {colorClassMap[
           image.colorLabel
         ] || ''} ring-1 ring-black/30"
       ></div>
@@ -136,6 +181,34 @@
           >
         {/each}
       </div>
+    {/if}
+
+    <!-- Download button -->
+    {#if !image.isMissing}
+      <span
+        onclick={handleDownload}
+        onkeydown={(e) => {
+          if (e.key === "Enter" || e.key === " ") handleDownload(e);
+        }}
+        class="absolute top-1.5 right-1.5 w-7 h-7 rounded bg-black/60 hover:bg-black/80 text-zinc-300 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+        title="下载"
+        role="button"
+        tabindex="0"
+      >
+        <svg
+          class="w-4 h-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+          />
+        </svg>
+      </span>
     {/if}
   </div>
 

@@ -18,6 +18,8 @@
     oncontextmenu,
     allTags = [],
     ontrashaction,
+    onlongpress,
+    ondownload,
   }: {
     store: GalleryStore;
     oncontextmenu?: (path: string, e: MouseEvent) => void;
@@ -26,7 +28,21 @@
       action: "restore" | "purge" | "empty",
       id?: number,
     ) => void;
+    onlongpress?: (path: string) => void;
+    ondownload?: (path: string) => void;
   } = $props();
+
+  let filterPanelOpen = $state(false);
+
+  $effect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    filterPanelOpen = mq.matches;
+    const handler = (e: MediaQueryListEvent) => {
+      filterPanelOpen = e.matches;
+    };
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  });
 
   function handleSelect(path: string, e: MouseEvent) {
     const multi = e.shiftKey || e.ctrlKey || e.metaKey;
@@ -61,6 +77,10 @@
   function handleViewModeChange(mode: ViewMode) {
     store.setViewMode(mode);
   }
+
+  function toggleFilter() {
+    filterPanelOpen = !filterPanelOpen;
+  }
 </script>
 
 {#if store.trashView}
@@ -85,13 +105,16 @@
       onsortchange={handleSortChange}
       onrefresh={() => store.refresh()}
       onopentrash={() => store.setTrashView(true)}
+      ontogglefilter={toggleFilter}
     />
 
-    <!-- Filter bar (horizontal) -->
-    <FilterPanel
-      filters={store.filters}
-      onfilterschange={(f) => store.setFilters(f)}
-    />
+    <!-- Filter bar (toggleable on mobile) -->
+    {#if filterPanelOpen}
+      <FilterPanel
+        filters={store.filters}
+        onfilterschange={(f) => store.setFilters(f)}
+      />
+    {/if}
 
     <!-- Main content: grid + optional detail panel -->
     <div class="flex-1 flex min-h-0 overflow-hidden">
@@ -107,6 +130,8 @@
           onloadmore={() => store.loadPage("next")}
           hasMore={store.pagination.hasMore}
           loadingMore={store.loading}
+          {onlongpress}
+          {ondownload}
         />
       </div>
     </div>
