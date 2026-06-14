@@ -339,11 +339,50 @@
     }
   }
 
+  // Trash actions: restore / purge a single item, or empty the whole bin.
+  async function handleTrashAction(
+    action: "restore" | "purge" | "empty",
+    id?: number,
+  ) {
+    if (action === "restore" && id != null) {
+      const res = await fetch("/api/comfyui/trash/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (res.ok) {
+        const body = await res.json();
+        if (body.renamed) {
+          showToast(
+            `已恢复为 ${body.restoredPath.split("/").pop()}（原路径被占用）`,
+            "info",
+          );
+        } else {
+          showToast("已恢复", "success");
+        }
+      }
+    } else if (action === "purge" && id != null) {
+      const res = await fetch("/api/comfyui/trash/purge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (res.ok) showToast("已彻底删除", "success");
+    } else if (action === "empty") {
+      const res = await fetch("/api/comfyui/trash/empty", { method: "POST" });
+      if (res.ok) {
+        const body = await res.json();
+        showToast(`已清空 ${body.purged} 项`, "success");
+      }
+    }
+  }
+
   // Initialize
   onMount(() => {
     store.refresh();
     loadCollections();
     loadAllTags();
+    store.loadTrashCount();
 
     const { disconnect } = createSSEClient((event) =>
       store.handleSSEEvent(event),
@@ -367,7 +406,12 @@
   <!-- Main content area -->
   <div class="flex-1 flex flex-col overflow-hidden">
     {#if store.viewMode === "library"}
-      <LibraryView {store} {allTags} oncontextmenu={handleContextMenu} />
+      <LibraryView
+        {store}
+        {allTags}
+        oncontextmenu={handleContextMenu}
+        ontrashaction={handleTrashAction}
+      />
     {:else if store.viewMode === "inspect"}
       <InspectView {store} {allTags} oncontextmenu={handleContextMenu} />
     {:else if store.viewMode === "compare"}

@@ -10,19 +10,23 @@
     searchQuery = "",
     sortOption,
     totalImages = 0,
+    trashCount = 0,
     onviewmodechange,
     onsearchchange,
     onsortchange,
     onrefresh,
+    onopentrash,
   }: {
     viewMode?: ViewMode;
     searchQuery?: string;
     sortOption: SortOption;
     totalImages?: number;
+    trashCount?: number;
     onviewmodechange: (mode: ViewMode) => void;
     onsearchchange: (query: string) => void;
     onsortchange: (sort: SortOption) => void;
     onrefresh: () => void;
+    onopentrash?: () => void;
   } = $props();
 
   let searchInput = $state(searchQuery);
@@ -119,6 +123,22 @@
 
   <!-- Right actions -->
   <div class="ml-auto flex items-center gap-2">
+    <!-- Trash -->
+    <button
+      onclick={() => onopentrash?.()}
+      class="rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:border-zinc-600 hover:text-amber-300 transition-colors flex items-center gap-1"
+      title="回收站"
+    >
+      回收站
+      {#if trashCount > 0}
+        <span
+          class="rounded-full bg-amber-500/20 px-1.5 text-[10px] text-amber-300"
+        >
+          {trashCount}
+        </span>
+      {/if}
+    </button>
+
     <!-- Image count -->
     <span class="text-xs text-zinc-500">
       {totalImages} 张图片
