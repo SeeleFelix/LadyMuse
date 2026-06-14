@@ -50,6 +50,7 @@ function collectImageFiles(
     if (!existsSync(dir)) return;
     const entries = readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
+      if (entry.name === ".trash") continue;
       if (
         entry.name.startsWith("_") &&
         !entry.name.endsWith(".png") &&

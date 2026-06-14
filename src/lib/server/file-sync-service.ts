@@ -132,7 +132,10 @@ export class FileSyncService {
    */
   private shouldIgnore(filename: string): boolean {
     const basename = filename.split("/").pop() ?? filename;
-    return basename.startsWith("_");
+    if (basename.startsWith("_")) return true;
+    // Never track files inside the recycle bin.
+    if (filename.split("/").includes(".trash")) return true;
+    return false;
   }
 
   /**
@@ -162,6 +165,12 @@ export class FileSyncService {
     }
 
     this.debounceEvent("delete", filename, async () => {
+      const existing = await db
+        .select({ relativePath: imageAttributes.relativePath })
+        .from(imageAttributes)
+        .where(eq(imageAttributes.relativePath, filename))
+        .limit(1);
+      if (existing.length === 0) return;
       await db
         .update(imageAttributes)
         .set({ isMissing: true, updatedAt: new Date().toISOString() })
@@ -232,6 +241,7 @@ export class FileSyncService {
 
       for (const entry of entries) {
         if (entry.name.startsWith("_")) continue;
+        if (entry.name === ".trash") continue;
 
         const fullPath = join(dir, entry.name);
 
