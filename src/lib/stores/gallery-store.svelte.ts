@@ -304,6 +304,8 @@ export function createGalleryStore(api: {
     const currentIndex = images.findIndex((img) => img.relativePath === path);
     console.log("[img-debug] select()", {
       path,
+      multi,
+      range,
       imagesLen: images.length,
       index: currentIndex,
       activeBefore: activeImage?.relativePath ?? null,
@@ -344,13 +346,11 @@ export function createGalleryStore(api: {
     }
 
     // Update active image
-    const found = images.find((img) => img.relativePath === path) ?? null;
+    activeImage = images.find((img) => img.relativePath === path) ?? null;
     console.log("[img-debug] activeImage assigned", {
       requested: path,
-      foundPath: found?.relativePath ?? null,
-      activeAfter: found?.relativePath ?? null,
+      activeAfter: activeImage?.relativePath ?? null,
     });
-    activeImage = found;
   }
 
   /**
@@ -439,9 +439,13 @@ export function createGalleryStore(api: {
     } else {
       // Debounce add/modify: batch rapid-fire events into a single reload
       if (_refreshTimer) clearTimeout(_refreshTimer);
-      _refreshTimer = setTimeout(() => {
+      _refreshTimer = setTimeout(async () => {
         _refreshTimer = null;
-        untrack(() => loadPage());
+        await untrack(() => loadPage());
+        console.log("[img-debug] sse reload fired", {
+          imagesLen: images.length,
+          activeAfter: activeImage?.relativePath ?? null,
+        });
       }, 500);
     }
   }
