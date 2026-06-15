@@ -31,6 +31,15 @@
 
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   let touchStartPos = { x: 0, y: 0 };
+  // Timestamp (ms since epoch) of the last touch event observed on this
+  // card. Mobile browsers fire a native `contextmenu` as part of the
+  // long-press gesture, racing our 500 ms `setTimeout`; checking a flag
+  // set inside the timer callback loses that race. Instead we treat any
+  // `contextmenu` arriving within 1 s of a touch event as touch-originated
+  // and suppress it, so only MobileActionSheet opens. Desktop right-clicks
+  // have no recent touch event and pass through unchanged. Plain `let`
+  // rather than $state: read only inside event handlers, never rendered.
+  let lastTouchEventTime = 0;
 
   function getImageUrl(): string {
     return `/api/comfyui/images/${encodeURIComponent(image.relativePath)}`;
@@ -43,6 +52,7 @@
   function handleTouchStart(e: TouchEvent) {
     const touch = e.touches[0];
     if (!touch) return;
+    lastTouchEventTime = Date.now();
     touchStartPos = { x: touch.clientX, y: touch.clientY };
     longPressTimer = setTimeout(() => {
       onlongpress?.(image.relativePath);
@@ -63,6 +73,7 @@
   }
 
   function handleTouchEnd() {
+    lastTouchEventTime = Date.now();
     if (longPressTimer) {
       clearTimeout(longPressTimer);
       longPressTimer = null;
@@ -74,12 +85,21 @@
     e.preventDefault();
     ondownload?.(image.relativePath);
   }
+
+  function handleContextMenu(e: MouseEvent) {
+    if (Date.now() - lastTouchEventTime < 1000) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    oncontextmenu(image.relativePath, e);
+  }
 </script>
 
 <button
   onclick={(e) => onselect(image.relativePath, e)}
   {ondblclick}
-  oncontextmenu={(e) => oncontextmenu(image.relativePath, e)}
+  oncontextmenu={handleContextMenu}
   ontouchstart={handleTouchStart}
   ontouchmove={handleTouchMove}
   ontouchend={handleTouchEnd}
