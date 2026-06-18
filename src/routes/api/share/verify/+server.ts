@@ -15,9 +15,9 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 
   cookies.set(COOKIE_NAME, "1", {
     httpOnly: true,
+    secure: false,
     path: "/share",
     maxAge: COOKIE_MAX_AGE,
-    sameSite: "lax",
   });
 
   return json({ success: true });
