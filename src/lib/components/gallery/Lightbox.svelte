@@ -545,7 +545,4 @@
   :global(.pswp__ui) {
     display: none !important;
   }
-  :global(.pswp) {
-    position: absolute !important;
-  }
 </style>
