@@ -360,7 +360,9 @@
 
   <!-- Image area + optional info panel -->
   <div class="flex-1 flex overflow-hidden">
-    <div class="flex-1 flex items-center justify-center relative">
+    <div
+      class="flex-1 flex items-center justify-center overflow-hidden relative"
+    >
       {#if currentImage}
         <!-- Navigation arrows (hidden on mobile, replaced by swipe) -->
         {#if currentIndex > 0}

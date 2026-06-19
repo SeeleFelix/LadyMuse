@@ -151,8 +151,6 @@
       relativePath: img.relativePath,
       filename: img.relativePath.split("/").pop() || img.relativePath,
       modifiedAt: img.fileModifiedAt ?? undefined,
-      width: img.width,
-      height: img.height,
     })),
   );
 
