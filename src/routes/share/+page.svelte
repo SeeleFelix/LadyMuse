@@ -1,16 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import PasswordGate from "$lib/components/share/PasswordGate.svelte";
-  import ShareCard from "$lib/components/share/ShareCard.svelte";
-  import ShareLightbox from "$lib/components/share/ShareLightbox.svelte";
-
-  interface ImageData {
-    relativePath: string;
-  }
+  import ThumbnailCard from "$lib/components/gallery/ThumbnailCard.svelte";
+  import Lightbox from "$lib/components/gallery/Lightbox.svelte";
+  import { downloadImage } from "$lib/utils/download-image";
+  import type { ImageResult } from "$lib/stores/gallery-store.svelte";
 
   let { data } = $props();
 
-  let images = $state<ImageData[]>(data.images || []);
+  let images = $state<ImageResult[]>(data.images || []);
   let nextCursor = $state<string | null>(data.nextCursor || null);
   let hasMore = $state<boolean>(data.hasMore || false);
   let loading = $state(false);
@@ -22,13 +20,26 @@
   let sentinelEl = $state<HTMLDivElement>();
   let observer = $state<IntersectionObserver>();
 
-  function handleCardClick(index: number) {
-    lightboxIndex = index;
-    lightboxOpen = true;
+  let totalCount = $derived(images.length);
+
+  function handleCardClick(path: string) {
+    const idx = images.findIndex((img) => img.relativePath === path);
+    if (idx !== -1) {
+      lightboxIndex = idx;
+      lightboxOpen = true;
+    }
   }
 
   function closeLightbox() {
     lightboxOpen = false;
+  }
+
+  function handleLightboxNavigate(index: number) {
+    lightboxIndex = index;
+  }
+
+  async function handleDownload(imageUrl: string, filename: string) {
+    await downloadImage(imageUrl, filename);
   }
 
   async function loadMore() {
@@ -39,7 +50,6 @@
       const params = new URLSearchParams({ cursor: nextCursor, limit: "50" });
       const res = await fetch(`/api/share/browse?${params}`);
       const result = await res.json();
-
       images = [...images, ...result.images];
       nextCursor = result.nextCursor;
       hasMore = result.hasMore;
@@ -86,12 +96,15 @@
       class="sticky top-0 z-40 bg-zinc-950/80 backdrop-blur border-b border-zinc-800"
     >
       <div class="flex items-center justify-between px-4 py-3 max-w-none">
-        <h1 class="text-lg font-semibold text-zinc-100">分享图库</h1>
+        <div class="flex items-center gap-3">
+          <h1 class="text-lg font-semibold text-zinc-100">分享图库</h1>
+          <span class="text-sm text-zinc-500">{totalCount} 张图片</span>
+        </div>
         <button
           onclick={clearAuth}
           class="px-3 py-1.5 text-sm rounded-lg bg-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors"
         >
-          退出
+          退出登录
         </button>
       </div>
     </div>
@@ -101,11 +114,20 @@
       <div
         class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-3"
       >
-        {#each images as image, i}
-          <ShareCard
-            relativePath={image.relativePath}
-            index={i}
-            onclick={handleCardClick}
+        {#each images as image}
+          <ThumbnailCard
+            {image}
+            thumbUrl={`/api/share/thumbnails/${encodeURIComponent(image.relativePath)}`}
+            onselect={(path: string) => handleCardClick(path)}
+            ondblclick={() => handleCardClick(image.relativePath)}
+            oncontextmenu={() => {}}
+            ondownload={(path: string) => {
+              const filename = path.split("/").pop() || "image";
+              downloadImage(
+                `/api/share/images/${encodeURIComponent(path)}`,
+                filename,
+              );
+            }}
           />
         {/each}
       </div>
@@ -140,12 +162,35 @@
 
   <!-- Lightbox -->
   {#if lightboxOpen}
-    <ShareLightbox
-      {images}
+    <Lightbox
+      images={images.map((img) => ({
+        relativePath: img.relativePath,
+        filename: img.relativePath.split("/").pop() || img.relativePath,
+        modifiedAt: img.fileModifiedAt ?? undefined,
+        width: img.width,
+        height: img.height,
+        fileSize: img.fileSize,
+        fileFormat: img.fileFormat,
+        rating: img.rating,
+        extractedModels: img.extractedModels,
+        extractedLoras: img.extractedLoras,
+        extractedSamplers: img.extractedSamplers,
+        extractedSchedulers: img.extractedSchedulers,
+        steps: img.steps,
+        cfgScale: img.cfgScale,
+        seed: img.seed,
+        positivePrompt: img.positivePrompt,
+        negativePrompt: img.negativePrompt,
+      }))}
       currentIndex={lightboxIndex}
+      showZoom={false}
+      showCopyLink={false}
+      showFilmstrip={false}
+      showInfo={true}
+      imageUrlBase="/api/share/images"
       onclose={closeLightbox}
-      onprev={(i: number) => (lightboxIndex = i)}
-      onnext={(i: number) => (lightboxIndex = i)}
+      onnavigate={handleLightboxNavigate}
+      ondownload={handleDownload}
     />
   {/if}
 {/if}
