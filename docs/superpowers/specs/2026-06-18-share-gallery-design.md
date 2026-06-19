@@ -1,3 +1,6 @@
+> **Note:** This spec has been superseded by `2026-06-19-share-page-enhancements-design.md`.
+> The architecture, components, and APIs described below have been significantly revised.
+
 # Share Gallery Design Spec
 
 ## Context
