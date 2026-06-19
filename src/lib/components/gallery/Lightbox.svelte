@@ -76,42 +76,51 @@
   // Copy feedback
   let copied = $state(false);
 
-  // Mobile info sheet
-  let infoSheetOpen = $state(false);
-  let sheetOffset = $state(0);
+  // Mobile info sheet — single pixel-offset system
+  let sheetOpen = $state(false);
+  let sheetDragPx = $state(0);
   let sheetDragging = $state(false);
   let sheetStartY = $state(0);
-  let sheetStartOffset = $state(0);
+  let sheetStartPx = $state(0);
 
-  function openInfoSheet() {
-    infoSheetOpen = true;
-    sheetOffset = 0;
+  const SHEET_HANDLE_H = 48;
+
+  function sheetPanelH() {
+    return Math.round(window.innerHeight * 0.5);
   }
 
-  function closeInfoSheet() {
-    infoSheetOpen = false;
-    sheetOffset = 0;
+  function sheetClosedOffset() {
+    return sheetPanelH() - SHEET_HANDLE_H;
+  }
+
+  function sheetYpx(): number {
+    if (sheetDragging) {
+      return Math.max(0, Math.min(sheetClosedOffset(), sheetDragPx));
+    }
+    return sheetOpen ? 0 : sheetClosedOffset();
+  }
+
+  function toggleSheet() {
+    sheetOpen = !sheetOpen;
   }
 
   function handleSheetPointerDown(e: PointerEvent) {
     sheetDragging = true;
     sheetStartY = e.clientY;
-    sheetStartOffset = sheetOffset;
+    sheetStartPx = sheetOpen ? 0 : sheetClosedOffset();
     (e.target as HTMLElement)?.setPointerCapture?.(e.pointerId);
   }
 
   function handleSheetPointerMove(e: PointerEvent) {
     if (!sheetDragging) return;
-    sheetOffset = Math.max(0, sheetStartOffset + (sheetStartY - e.clientY));
+    sheetDragPx = sheetStartPx + (e.clientY - sheetStartY);
   }
 
   function handleSheetPointerUp(_e: PointerEvent) {
     sheetDragging = false;
-    if (sheetOffset > 60) {
-      openInfoSheet();
-    } else {
-      closeInfoSheet();
-    }
+    const threshold = sheetClosedOffset() * 0.45;
+    sheetOpen = sheetDragPx < threshold;
+    sheetDragPx = 0;
   }
 
   const MIN_SCALE = 0.1;
@@ -548,14 +557,14 @@
   {#if showInfo && currentImage}
     <div
       class="md:hidden fixed inset-x-0 bottom-0 z-[60] bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-700/50 rounded-t-2xl shadow-2xl"
-      style="height: 50vh; transform: translateY(calc(100% - 48px - {sheetOffset}px)); transition: {sheetDragging
+      style="height: 50vh; transform: translateY({sheetYpx()}px); transition: {sheetDragging
         ? 'none'
         : 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)'};"
     >
-      <!-- Handle area (collapsed: 48px, always visible) -->
+      <!-- Handle area (48px, always visible) -->
       <div
         class="flex flex-col items-center pt-3 pb-2 cursor-pointer select-none touch-none"
-        onclick={() => (infoSheetOpen ? closeInfoSheet() : openInfoSheet())}
+        onclick={toggleSheet}
         onpointerdown={handleSheetPointerDown}
         onpointermove={handleSheetPointerMove}
         onpointerup={handleSheetPointerUp}
@@ -564,7 +573,9 @@
       >
         <div class="w-8 h-1 rounded-full bg-zinc-500/60 mb-2"></div>
         <div class="flex items-center gap-2 text-xs">
-          <span class="text-zinc-400">图片信息</span>
+          <span class="text-zinc-400"
+            >{sheetOpen ? "下滑收起" : "图片信息"}</span
+          >
           {#if (currentImage.rating ?? 0) > 0}
             <span class="text-amber-400 text-xs">
               {"★".repeat(currentImage.rating ?? 0)}
@@ -579,7 +590,10 @@
       </div>
 
       <!-- Sheet content (scrollable) -->
-      <div class="overflow-y-auto px-4 pb-6" style="height: calc(50vh - 48px);">
+      <div
+        class="overflow-y-auto px-4 pb-6"
+        style="height: calc(50vh - {SHEET_HANDLE_H}px);"
+      >
         <ImageInfo
           filename={currentImage.filename || ""}
           fileSize={currentImage.fileSize ?? null}
