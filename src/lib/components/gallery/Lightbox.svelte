@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import ImageInfo from "./ImageInfo.svelte";
   import PhotoSwipe from "photoswipe";
   import "photoswipe/style.css";
@@ -137,7 +138,6 @@
       closeOnVerticalDrag: false,
       pinchToClose: false,
       clickToCloseNonZoomable: false,
-      showHideAnimationType: "none",
       preload: [1, 1],
     });
 
@@ -188,11 +188,11 @@
     pswp.currSlide.zoomTo(1, { x: 0, y: 0 }, 333);
   }
 
-  // Create/destroy PS when container mounts/unmounts
+  // Create PS once when container mounts
   $effect(() => {
     const el = imageContainerEl;
     if (el) {
-      createPswp($state.snapshot(currentIndex));
+      createPswp(untrack(() => currentIndex));
     }
     return () => destroyPswp();
   });
