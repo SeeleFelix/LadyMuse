@@ -1,5 +1,7 @@
 <script lang="ts">
   import ImageInfo from "./ImageInfo.svelte";
+  import PhotoSwipe from "photoswipe";
+  import "photoswipe/style.css";
 
   let {
     images = [],
@@ -49,30 +51,13 @@
     ondownload?: (imageUrl: string, filename: string) => void;
   } = $props();
 
-  let scale = $state(1);
-  let translateX = $state(0);
-  let translateY = $state(0);
-  let isDragging = $state(false);
-  let didDrag = $state(false);
-  let dragStart = { x: 0, y: 0 };
-
-  // === Touch state (single system for all mobile interactions) ===
-  let touchStartX = $state(0);
-  let touchStartY = $state(0);
-  let touchStartScale = $state(1);
-  let touchStartTX = $state(0);
-  let touchStartTY = $state(0);
-  let touchActive = $state(false);
-  let touchMoved = $state(false);
-  let touchIsPinch = $state(false);
-  let pinchStartDist = $state(0);
-
-  // Double-tap state
-  let lastTapTime = $state(0);
-  let lastTapPos = { x: 0, y: 0 };
-
   // Copy feedback
   let copied = $state(false);
+
+  // PhotoSwipe
+  let pswp = $state<PhotoSwipe | null>(null);
+  let imageContainerEl = $state<HTMLDivElement | null>(null);
+  let currentZoom = $state(1); // for toolbar display
 
   // Mobile info sheet — single pixel-offset system
   let sheetOpen = $state(false);
@@ -121,220 +106,103 @@
     sheetDragPx = 0;
   }
 
-  const MIN_SCALE = 0.1;
-  const MAX_SCALE = 10;
-
   let currentImage = $derived(images[currentIndex]);
-
-  function resetTransform() {
-    scale = 1;
-    translateX = 0;
-    translateY = 0;
-  }
 
   function getImageUrl(relativePath: string, modifiedAt?: string): string {
     const base = `/${imageUrlBase.replace(/^\/+/, "")}/${encodeURIComponent(relativePath)}`;
     return modifiedAt ? `${base}?t=${new Date(modifiedAt).getTime()}` : base;
   }
 
-  function goNext() {
-    if (currentIndex < images.length - 1) {
-      resetTransform();
-      onnavigate?.(currentIndex + 1);
+  // === PhotoSwipe lifecycle ===
+  function buildDataSource() {
+    return images.map((img) => ({
+      src: getImageUrl(img.relativePath, img.modifiedAt),
+      width: img.width || 1600,
+      height: img.height || 900,
+    }));
+  }
+
+  function createPswp(index: number) {
+    if (!imageContainerEl) return;
+    destroyPswp();
+
+    pswp = new PhotoSwipe({
+      dataSource: buildDataSource(),
+      index,
+      appendToEl: imageContainerEl,
+      bgOpacity: 0,
+      padding: { top: 0, bottom: 0, left: 0, right: 0 },
+      arrowKeys: false,
+      escKey: false,
+      closeOnVerticalDrag: false,
+      pinchToClose: false,
+      clickToCloseNonZoomable: false,
+      showHideAnimationType: "none",
+      preload: [1, 1],
+    });
+
+    pswp.init();
+
+    pswp.on("change", () => {
+      if (!pswp?.currSlide) return;
+      onnavigate?.(pswp.currSlide.index);
+    });
+
+    pswp.on("close", () => {
+      onclose();
+    });
+
+    pswp.on("imageSizeChange", () => {
+      if (pswp?.currSlide) currentZoom = pswp.currSlide.currZoomLevel;
+    });
+  }
+
+  function destroyPswp() {
+    if (pswp) {
+      pswp.destroy();
+      pswp = null;
     }
   }
 
-  function goPrev() {
-    if (currentIndex > 0) {
-      resetTransform();
-      onnavigate?.(currentIndex - 1);
-    }
+  function pswpGoNext() {
+    if (!pswp?.currSlide || currentIndex >= images.length - 1) return;
+    pswp.next();
   }
 
-  // === Desktop mouse handlers ===
-  function handleWheel(e: WheelEvent) {
-    if (!showZoom) return;
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.15 : 0.15;
-    scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale + delta * scale));
-    if (scale <= 1) {
-      translateX = 0;
-      translateY = 0;
-    }
+  function pswpGoPrev() {
+    if (!pswp?.currSlide || currentIndex <= 0) return;
+    pswp.prev();
   }
 
-  function handleMouseDown(e: MouseEvent) {
-    if (!showZoom) return;
-    if (scale > 1) {
-      isDragging = true;
-      didDrag = false;
-      dragStart = { x: e.clientX - translateX, y: e.clientY - translateY };
-    }
+  function pswpZoomFit() {
+    if (!pswp?.currSlide) return;
+    pswp.currSlide.zoomTo(
+      pswp.currSlide.zoomLevels.initial,
+      { x: 0, y: 0 },
+      333,
+    );
   }
 
-  function handleMouseMove(e: MouseEvent) {
-    if (!showZoom) return;
-    if (isDragging && scale > 1) {
-      const nx = e.clientX - dragStart.x;
-      const ny = e.clientY - dragStart.y;
-      if (Math.abs(nx - translateX) > 2 || Math.abs(ny - translateY) > 2)
-        didDrag = true;
-      translateX = nx;
-      translateY = ny;
-    }
+  function pswpZoomOne() {
+    if (!pswp?.currSlide) return;
+    pswp.currSlide.zoomTo(1, { x: 0, y: 0 }, 333);
   }
 
-  function handleMouseUp() {
-    isDragging = false;
-  }
-
-  function toggleZoom(e: MouseEvent) {
-    if (!showZoom) return;
-    if (e.detail === 0) return; // synthetic click from touch — ignore
-    if (didDrag) {
-      didDrag = false;
-      return;
+  // Create/destroy PS when container mounts/unmounts
+  $effect(() => {
+    const el = imageContainerEl;
+    if (el) {
+      createPswp($state.snapshot(currentIndex));
     }
-    if (scale > 1) {
-      resetTransform();
-    } else {
-      scale = 3;
+    return () => destroyPswp();
+  });
+
+  // Navigate PS when parent changes currentIndex (filmstrip, etc.)
+  $effect(() => {
+    if (pswp?.currSlide && pswp.currSlide.index !== currentIndex) {
+      pswp.goTo(currentIndex);
     }
-  }
-
-  // === Touch handlers (mobile only — not shared with desktop) ===
-  function handleTouchStart(e: TouchEvent) {
-    if (!showZoom) return;
-
-    const touches = e.touches;
-
-    if (touches.length === 2) {
-      // Pinch start — cancel any active single-finger tracking
-      touchIsPinch = true;
-      touchActive = false;
-      e.preventDefault();
-
-      const dx = touches[0].clientX - touches[1].clientX;
-      const dy = touches[0].clientY - touches[1].clientY;
-      pinchStartDist = Math.hypot(dx, dy);
-      touchStartScale = scale;
-      touchStartX = (touches[0].clientX + touches[1].clientX) / 2;
-      touchStartY = (touches[0].clientY + touches[1].clientY) / 2;
-      touchStartTX = translateX;
-      touchStartTY = translateY;
-      return;
-    }
-
-    if (touches.length === 1 && !touchIsPinch) {
-      e.preventDefault(); // suppress synthetic click + browser scroll
-      touchStartX = touches[0].clientX;
-      touchStartY = touches[0].clientY;
-      touchStartScale = scale;
-      touchStartTX = translateX;
-      touchStartTY = translateY;
-      touchActive = true;
-      touchMoved = false;
-
-      // Double-tap detection
-      const now = Date.now();
-      const dist = Math.hypot(
-        touches[0].clientX - lastTapPos.x,
-        touches[0].clientY - lastTapPos.y,
-      );
-      if (now - lastTapTime < 300 && dist < 30) {
-        e.preventDefault();
-        if (scale > 1) resetTransform();
-        else scale = 3;
-        lastTapTime = 0;
-        touchActive = false;
-        return;
-      }
-      lastTapTime = now;
-      lastTapPos = {
-        x: touches[0].clientX,
-        y: touches[0].clientY,
-      };
-    }
-  }
-
-  function handleTouchMove(e: TouchEvent) {
-    if (!showZoom) return;
-
-    const touches = e.touches;
-
-    if (touchIsPinch && touches.length === 2) {
-      e.preventDefault();
-      const dx = touches[0].clientX - touches[1].clientX;
-      const dy = touches[0].clientY - touches[1].clientY;
-      const dist = Math.hypot(dx, dy);
-      const mx = (touches[0].clientX + touches[1].clientX) / 2;
-      const my = (touches[0].clientY + touches[1].clientY) / 2;
-
-      const ratio = dist / pinchStartDist;
-      const newScale = Math.min(
-        MAX_SCALE,
-        Math.max(MIN_SCALE, touchStartScale * ratio),
-      );
-      const scaleRatio = newScale / touchStartScale;
-
-      translateX = mx * (1 - scaleRatio) + touchStartTX * scaleRatio;
-      translateY = my * (1 - scaleRatio) + touchStartTY * scaleRatio;
-      scale = newScale;
-      if (scale <= 1) {
-        translateX = 0;
-        translateY = 0;
-      }
-      return;
-    }
-
-    if (touchActive && touches.length === 1) {
-      const dx = touches[0].clientX - touchStartX;
-      const dy = touches[0].clientY - touchStartY;
-
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-        touchMoved = true;
-      }
-
-      if (scale > 1) {
-        e.preventDefault();
-        translateX = touchStartTX + dx;
-        translateY = touchStartTY + dy;
-      }
-    }
-  }
-
-  function handleTouchEnd(e: TouchEvent) {
-    if (!showZoom) return;
-
-    if (touchIsPinch && e.touches.length < 2) {
-      // Pinch ended — transition to single-finger pan if one finger remains
-      touchIsPinch = false;
-      pinchStartDist = 0;
-      if (e.touches.length === 1) {
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-        touchStartTX = translateX;
-        touchStartTY = translateY;
-        touchActive = true;
-        touchMoved = false;
-        return;
-      }
-    }
-
-    if (touchActive && touchMoved && scale <= 1) {
-      const t = e.changedTouches[0];
-      if (t) {
-        const dx = t.clientX - touchStartX;
-        if (dx < -50) goNext();
-        else if (dx > 50) goPrev();
-      }
-    }
-
-    if (e.touches.length === 0) {
-      touchActive = false;
-      touchMoved = false;
-    }
-  }
+  });
 
   // === Download and copy ===
   function getFullImageUrl(): string {
@@ -369,35 +237,15 @@
     if (e.key === "Escape") {
       if (contextMenuOpen) return;
       onclose();
-    } else if (e.key === "ArrowRight") goNext();
-    else if (e.key === "ArrowLeft") goPrev();
-    else if (e.key === "+" || e.key === "=")
-      scale = Math.min(MAX_SCALE, scale * 1.2);
-    else if (e.key === "-") scale = Math.max(MIN_SCALE, scale / 1.2);
+    } else if (e.key === "ArrowRight") pswpGoNext();
+    else if (e.key === "ArrowLeft") pswpGoPrev();
   }
-
-  $effect(() => {
-    resetTransform();
-  });
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div
-  class="fixed inset-0 z-50 bg-black/95 flex flex-col"
-  style="touch-action: none;"
-  onwheel={handleWheel}
-  onmousedown={handleMouseDown}
-  onmousemove={handleMouseMove}
-  onmouseup={handleMouseUp}
-  onmouseleave={handleMouseUp}
-  ontouchstart={(e) => handleTouchStart(e)}
-  ontouchmove={(e) => handleTouchMove(e)}
-  ontouchend={(e) => handleTouchEnd(e)}
-  ontouchcancel={(e) => handleTouchEnd(e)}
-  role="dialog"
->
+<div class="fixed inset-0 z-50 bg-black/95 flex flex-col" role="dialog">
   <!-- Toolbar -->
   <div class="flex items-center justify-between px-4 py-2 bg-black/50">
     <div class="text-sm text-zinc-300 truncate max-w-[200px] md:max-w-md">
@@ -405,17 +253,19 @@
     </div>
     <div class="flex items-center gap-2 md:gap-3">
       {#if showZoom}
-        <span class="text-xs text-zinc-500">{Math.round(scale * 100)}%</span>
+        <span class="text-xs text-zinc-500"
+          >{Math.round(currentZoom * 100)}%</span
+        >
         <span class="text-xs text-zinc-500"
           >{currentIndex + 1}/{images.length}</span
         >
         <button
-          onclick={resetTransform}
+          onclick={pswpZoomFit}
           class="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-zinc-800"
           >适应</button
         >
         <button
-          onclick={() => (scale = 1)}
+          onclick={pswpZoomOne}
           class="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-zinc-800 hidden md:block"
           >1:1</button
         >
@@ -517,7 +367,7 @@
         <!-- Navigation arrows (hidden on mobile, replaced by swipe) -->
         {#if currentIndex > 0}
           <button
-            onclick={goPrev}
+            onclick={pswpGoPrev}
             class="absolute left-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 hidden md:block"
           >
             <svg
@@ -537,7 +387,7 @@
         {/if}
         {#if currentIndex < images.length - 1}
           <button
-            onclick={goNext}
+            onclick={pswpGoNext}
             class="absolute right-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 hidden md:block"
           >
             <svg
@@ -556,25 +406,7 @@
           </button>
         {/if}
 
-        <img
-          src={getImageUrl(currentImage.relativePath, currentImage.modifiedAt)}
-          alt=""
-          onclick={(e) => toggleZoom(e)}
-          oncontextmenu={(e) => {
-            e.preventDefault();
-            oncontextmenu?.(e);
-          }}
-          class="max-w-full max-h-full select-none {showZoom && scale <= 1
-            ? 'object-contain cursor-zoom-in'
-            : showZoom
-              ? 'cursor-zoom-out'
-              : 'object-contain'}"
-          style="transform: scale({scale}) translate({translateX /
-            scale}px, {translateY / scale}px); transition: {isDragging
-            ? 'none'
-            : 'transform 0.2s ease'}; touch-action: manipulation;"
-          draggable="false"
-        />
+        <div bind:this={imageContainerEl} class="absolute inset-0"></div>
       {/if}
     </div>
 
@@ -681,7 +513,6 @@
       {#each images as img, i}
         <button
           onclick={() => {
-            resetTransform();
             onnavigate?.(i);
           }}
           class="shrink-0 w-12 h-12 rounded {i === currentIndex
@@ -711,3 +542,9 @@
     </div>
   {/if}
 </div>
+
+<style>
+  :global(.pswp__ui) {
+    display: none !important;
+  }
+</style>

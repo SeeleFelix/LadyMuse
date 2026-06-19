@@ -52,6 +52,7 @@
     "highlight.js": "^11.11.1",
     "jszip": "^3.10.1",
     "marked": "^18.0.2",
+    "photoswipe": "^5.4.4",
     "sharp": "^0.35.1",
     "sqlite-vec": "^0.1.9",
     "zod": "^4.3.6"
