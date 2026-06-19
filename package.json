@@ -11,9 +11,10 @@
   "author": "SeeleFelix",
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "node proxy.js & vite dev",
     "build": "vite build",
     "preview": "vite preview",
+    "start": "node proxy.js & node build",
     "prepare": "husky",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
