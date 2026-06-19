@@ -5,5 +5,5 @@ serverPort = 7000
 name = "ladymuse"
 type = "tcp"
 localIP = "127.0.0.1"
-localPort = 3000
+localPort = 3001
 remotePort = 38080

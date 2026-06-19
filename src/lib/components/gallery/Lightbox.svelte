@@ -410,9 +410,9 @@
   </div>
 
   <!-- Image area + optional info panel -->
-  <div class="flex-1 flex overflow-hidden">
+  <div class="flex-1 flex flex-col md:flex-row overflow-hidden">
     <div
-      class="flex-1 flex items-center justify-center overflow-hidden relative"
+      class="flex-1 flex items-center justify-center overflow-hidden relative min-h-0"
     >
       {#if currentImage}
         <!-- Navigation arrows (hidden on mobile, replaced by swipe) -->
@@ -481,7 +481,7 @@
 
     {#if showInfo && currentImage}
       <div
-        class="w-80 shrink-0 border-l border-zinc-800 bg-zinc-900/80 overflow-y-auto p-4"
+        class="w-full md:w-80 shrink-0 border-t md:border-t-0 md:border-l border-zinc-800 bg-zinc-900/80 overflow-y-auto p-4 max-h-[45vh] md:max-h-none"
       >
         <div class="text-xs text-zinc-500 mb-3">图片信息</div>
         <ImageInfo

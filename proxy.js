@@ -3,10 +3,14 @@ import http from "node:http";
 const TARGET_PORT = 3000;
 const PROXY_PORT = 3001;
 
-const ALLOWED = ["/share", "/api/share"];
+const SHARE_ROUTES = ["/share", "/api/share"];
+// SvelteKit/Vite internal paths needed for CSS/JS/HMR to work
+const ASSET_PREFIXES = ["/_app", "/src", "/@vite", "/@fs", "/node_modules", "/favicon.ico"];
 
 const proxy = http.createServer((req, res) => {
-  const allowed = ALLOWED.some((p) => req.url?.startsWith(p));
+  const allowed =
+    SHARE_ROUTES.some((p) => req.url?.startsWith(p)) ||
+    ASSET_PREFIXES.some((p) => req.url?.startsWith(p));
   if (!allowed) {
     res.writeHead(403);
     res.end("Forbidden");
