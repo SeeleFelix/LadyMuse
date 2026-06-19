@@ -57,7 +57,8 @@
 
   // PhotoSwipe
   let pswp = $state<PhotoSwipe | null>(null);
-  let currentZoom = $state(1);
+  let imageContainerEl = $state<HTMLDivElement | null>(null);
+  let currentZoom = $state(1); // for toolbar display
 
   // Mobile info sheet — single pixel-offset system
   let sheetOpen = $state(false);
@@ -123,12 +124,15 @@
   }
 
   function createPswp(index: number) {
+    if (!imageContainerEl) return;
     destroyPswp();
 
     pswp = new PhotoSwipe({
       dataSource: buildDataSource(),
       index,
-      bgOpacity: 0.85,
+      appendToEl: imageContainerEl,
+      bgOpacity: 0,
+      padding: { top: 0, bottom: 0, left: 0, right: 0 },
       arrowKeys: false,
       escKey: false,
       closeOnVerticalDrag: false,
@@ -184,9 +188,12 @@
     pswp.currSlide.zoomTo(1, { x: 0, y: 0 }, 333);
   }
 
-  // Create PS on mount, destroy on unmount
+  // Create PS once when container mounts
   $effect(() => {
-    createPswp(untrack(() => currentIndex));
+    const el = imageContainerEl;
+    if (el) {
+      createPswp(untrack(() => currentIndex));
+    }
     return () => destroyPswp();
   });
 
@@ -238,14 +245,9 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div
-  class="fixed inset-0 z-[1600] flex flex-col pointer-events-none"
-  role="dialog"
->
+<div class="fixed inset-0 z-50 bg-black/95 flex flex-col" role="dialog">
   <!-- Toolbar -->
-  <div
-    class="flex items-center justify-between px-4 py-2 bg-black/50 pointer-events-auto"
-  >
+  <div class="flex items-center justify-between px-4 py-2 bg-black/50">
     <div class="text-sm text-zinc-300 truncate max-w-[200px] md:max-w-md">
       {currentImage?.filename || ""}
     </div>
@@ -356,34 +358,82 @@
     </div>
   </div>
 
-  <!-- PS handles image display full-screen behind us -->
-  <div class="flex-1"></div>
+  <!-- Image area + optional info panel -->
+  <div class="flex-1 flex overflow-hidden">
+    <div class="flex-1 flex items-center justify-center relative">
+      {#if currentImage}
+        <!-- Navigation arrows (hidden on mobile, replaced by swipe) -->
+        {#if currentIndex > 0}
+          <button
+            onclick={pswpGoPrev}
+            class="absolute left-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 hidden md:block"
+          >
+            <svg
+              class="w-6 h-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M15 19l-7-7 7-7"
+              />
+            </svg>
+          </button>
+        {/if}
+        {#if currentIndex < images.length - 1}
+          <button
+            onclick={pswpGoNext}
+            class="absolute right-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 hidden md:block"
+          >
+            <svg
+              class="w-6 h-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 5l7 7-7 7"
+              />
+            </svg>
+          </button>
+        {/if}
 
-  <!-- Desktop: sidebar overlay -->
-  {#if showInfo && currentImage}
-    <div
-      class="hidden md:block fixed right-0 top-0 bottom-0 w-80 border-l border-zinc-800 bg-zinc-900/90 overflow-y-auto p-4 pointer-events-auto z-[1610]"
-    >
-      <div class="text-xs text-zinc-500 mb-3 mt-12">图片信息</div>
-      <ImageInfo
-        filename={currentImage.filename || ""}
-        fileSize={currentImage.fileSize ?? null}
-        width={currentImage.width ?? null}
-        height={currentImage.height ?? null}
-        fileFormat={currentImage.fileFormat ?? null}
-        rating={currentImage.rating ?? null}
-        extractedModels={currentImage.extractedModels ?? []}
-        extractedLoras={currentImage.extractedLoras ?? []}
-        extractedSamplers={currentImage.extractedSamplers ?? []}
-        extractedSchedulers={currentImage.extractedSchedulers ?? []}
-        steps={currentImage.steps ?? null}
-        cfgScale={currentImage.cfgScale ?? null}
-        seed={currentImage.seed ?? null}
-        positivePrompt={currentImage.positivePrompt ?? null}
-        negativePrompt={currentImage.negativePrompt ?? null}
-      />
+        <div bind:this={imageContainerEl} class="absolute inset-0"></div>
+      {/if}
     </div>
-  {/if}
+
+    <!-- Desktop: full sidebar -->
+    {#if showInfo && currentImage}
+      <div
+        class="hidden md:block w-80 shrink-0 border-l border-zinc-800 bg-zinc-900/80 overflow-y-auto p-4"
+      >
+        <div class="text-xs text-zinc-500 mb-3">图片信息</div>
+        <ImageInfo
+          filename={currentImage.filename || ""}
+          fileSize={currentImage.fileSize ?? null}
+          width={currentImage.width ?? null}
+          height={currentImage.height ?? null}
+          fileFormat={currentImage.fileFormat ?? null}
+          rating={currentImage.rating ?? null}
+          extractedModels={currentImage.extractedModels ?? []}
+          extractedLoras={currentImage.extractedLoras ?? []}
+          extractedSamplers={currentImage.extractedSamplers ?? []}
+          extractedSchedulers={currentImage.extractedSchedulers ?? []}
+          steps={currentImage.steps ?? null}
+          cfgScale={currentImage.cfgScale ?? null}
+          seed={currentImage.seed ?? null}
+          positivePrompt={currentImage.positivePrompt ?? null}
+          negativePrompt={currentImage.negativePrompt ?? null}
+        />
+      </div>
+    {/if}
+  </div>
 
   <!-- Mobile: draggable bottom sheet for image info -->
   {#if showInfo && currentImage}
@@ -456,7 +506,7 @@
   <!-- Filmstrip (hidden on mobile) -->
   {#if showFilmstrip && images.length > 1}
     <div
-      class="h-16 bg-black/50 hidden md:flex items-center gap-1 px-4 overflow-x-auto pointer-events-auto"
+      class="h-16 bg-black/50 hidden md:flex items-center gap-1 px-4 overflow-x-auto"
     >
       {#each images as img, i}
         <button
@@ -494,5 +544,8 @@
 <style>
   :global(.pswp__ui) {
     display: none !important;
+  }
+  :global(.pswp) {
+    position: absolute !important;
   }
 </style>
