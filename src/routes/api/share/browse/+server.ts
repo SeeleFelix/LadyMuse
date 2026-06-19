@@ -6,6 +6,15 @@ import { eq, or, gt, lt, and, desc } from "drizzle-orm";
 
 const DEFAULT_LIMIT = 50;
 
+function parseJsonArray(val: string | null): string[] {
+  if (!val) return [];
+  try {
+    return JSON.parse(val);
+  } catch {
+    return [];
+  }
+}
+
 interface CursorData {
   modified_at: string;
   path: string;
@@ -88,14 +97,14 @@ export const GET: RequestHandler = async ({ url }) => {
       fileSize: img.fileSize,
       fileFormat: img.fileFormat,
       hasAlpha: img.hasAlpha,
-      createdAt: img.createdAt,
-      updatedAt: img.updatedAt,
+      createdAt: img.createdAt ?? "",
+      updatedAt: img.updatedAt ?? "",
       fileModifiedAt: img.fileModifiedAt,
       isMissing: img.isMissing,
-      extractedModels: img.extractedModels ?? [],
-      extractedLoras: img.extractedLoras ?? [],
-      extractedSamplers: img.extractedSamplers ?? [],
-      extractedSchedulers: img.extractedSchedulers ?? [],
+      extractedModels: parseJsonArray(img.extractedModels),
+      extractedLoras: parseJsonArray(img.extractedLoras),
+      extractedSamplers: parseJsonArray(img.extractedSamplers),
+      extractedSchedulers: parseJsonArray(img.extractedSchedulers),
       steps: img.steps,
       cfgScale: img.cfgScale,
       seed: img.seed,

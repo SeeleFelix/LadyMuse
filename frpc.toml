@@ -1,0 +1,9 @@
+serverAddr = "182.92.109.78"
+serverPort = 7000
+
+[[proxies]]
+name = "ladymuse"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 3000
+remotePort = 38080

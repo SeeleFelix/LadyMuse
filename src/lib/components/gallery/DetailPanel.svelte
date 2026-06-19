@@ -146,19 +146,19 @@
     <!-- Rating (editable) -->
     <div class="mb-3">
       <div class="text-xs text-zinc-500 mb-1">评分</div>
-      <StarRating value={image.rating ?? 0} {onrate} />
+      <StarRating value={image.rating ?? 0} onchange={onrate} />
     </div>
 
     <!-- Color Label -->
     <div class="mb-3">
       <div class="text-xs text-zinc-500 mb-1">颜色标记</div>
-      <ColorLabel value={image.colorLabel ?? null} {oncolor} />
+      <ColorLabel value={image.colorLabel ?? null} onchange={oncolor} />
     </div>
 
     <!-- Flag -->
     <div class="mb-3">
       <div class="text-xs text-zinc-500 mb-1">标记</div>
-      <FlagButtons flag={image.flag ?? null} {onflag} />
+      <FlagButtons flag={image.flag ?? null} onchange={onflag} />
     </div>
 
     <!-- Tags -->

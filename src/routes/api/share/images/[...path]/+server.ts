@@ -29,7 +29,7 @@ export const GET: RequestHandler = async ({ params }) => {
   // Pixel data is lossless — only encoding, no quality change.
   const buffer = await sharp(absPath).toFormat(targetFormat).toBuffer();
 
-  return new Response(buffer, {
+  return new Response(new Uint8Array(buffer), {
     headers: {
       "Content-Type": contentType,
       "Content-Length": buffer.length.toString(),

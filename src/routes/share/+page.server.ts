@@ -5,6 +5,15 @@ import { eq, or, gt, and, desc } from "drizzle-orm";
 
 const COOKIE_NAME = "share_auth";
 
+function parseJsonArray(val: string | null): string[] {
+  if (!val) return [];
+  try {
+    return JSON.parse(val);
+  } catch {
+    return [];
+  }
+}
+
 export const load: PageServerLoad = async ({ cookies }) => {
   const authed = cookies.get(COOKIE_NAME);
 
@@ -52,14 +61,14 @@ export const load: PageServerLoad = async ({ cookies }) => {
       fileSize: img.fileSize,
       fileFormat: img.fileFormat,
       hasAlpha: img.hasAlpha,
-      createdAt: img.createdAt,
-      updatedAt: img.updatedAt,
+      createdAt: img.createdAt ?? "",
+      updatedAt: img.updatedAt ?? "",
       fileModifiedAt: img.fileModifiedAt,
       isMissing: img.isMissing,
-      extractedModels: img.extractedModels ?? [],
-      extractedLoras: img.extractedLoras ?? [],
-      extractedSamplers: img.extractedSamplers ?? [],
-      extractedSchedulers: img.extractedSchedulers ?? [],
+      extractedModels: parseJsonArray(img.extractedModels),
+      extractedLoras: parseJsonArray(img.extractedLoras),
+      extractedSamplers: parseJsonArray(img.extractedSamplers),
+      extractedSchedulers: parseJsonArray(img.extractedSchedulers),
       steps: img.steps,
       cfgScale: img.cfgScale,
       seed: img.seed,
