@@ -5,6 +5,7 @@
     image,
     selected = false,
     active = false,
+    thumbUrl = undefined,
     onselect,
     ondblclick,
     oncontextmenu,
@@ -14,6 +15,7 @@
     image: ImageResult;
     selected?: boolean;
     active?: boolean;
+    thumbUrl?: string | undefined;
     onselect: (path: string, e: MouseEvent) => void;
     ondblclick: () => void;
     oncontextmenu: (path: string, e: MouseEvent) => void;
@@ -42,6 +44,7 @@
   let lastTouchEventTime = 0;
 
   function getImageUrl(): string {
+    if (thumbUrl) return thumbUrl;
     return `/api/comfyui/images/${encodeURIComponent(image.relativePath)}`;
   }
 
