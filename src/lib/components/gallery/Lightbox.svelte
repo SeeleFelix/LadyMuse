@@ -56,18 +56,16 @@
   let didDrag = $state(false);
   let dragStart = { x: 0, y: 0 };
 
-  // Touch/swipe state
-  let pointerStartX = $state(0);
-  let pointerActive = $state(false);
-  let swipeHandled = $state(false);
-
-  // Pinch state
-  let pinchStartDistance = $state(0);
-  let pinchStartScale = $state(1);
-  let pinchMidX = $state(0);
-  let pinchMidY = $state(0);
-  let pinchStartTranslateX = $state(0);
-  let pinchStartTranslateY = $state(0);
+  // === Touch state (single system for all mobile interactions) ===
+  let touchStartX = $state(0);
+  let touchStartY = $state(0);
+  let touchStartScale = $state(1);
+  let touchStartTX = $state(0);
+  let touchStartTY = $state(0);
+  let touchActive = $state(false);
+  let touchMoved = $state(false);
+  let touchIsPinch = $state(false);
+  let pinchStartDist = $state(0);
 
   // Double-tap state
   let lastTapTime = $state(0);
@@ -192,6 +190,7 @@
 
   function toggleZoom(e: MouseEvent) {
     if (!showZoom) return;
+    if (e.detail === 0) return; // synthetic click from touch — ignore
     if (didDrag) {
       didDrag = false;
       return;
@@ -203,85 +202,137 @@
     }
   }
 
-  // === Touch / pointer handlers ===
-  function handlePointerDown(e: PointerEvent) {
+  // === Touch handlers (mobile only — not shared with desktop) ===
+  function handleTouchStart(e: TouchEvent) {
     if (!showZoom) return;
-    if (e.pointerType !== "touch" || scale > 1) return;
-    pointerStartX = e.clientX;
-    pointerActive = true;
-    swipeHandled = false;
 
-    // Double-tap detection
-    const now = Date.now();
-    const dist = Math.hypot(e.clientX - lastTapPos.x, e.clientY - lastTapPos.y);
-    if (now - lastTapTime < 300 && dist < 30) {
+    const touches = e.touches;
+
+    if (touches.length === 2) {
+      // Pinch start — cancel any active single-finger tracking
+      touchIsPinch = true;
+      touchActive = false;
       e.preventDefault();
-      if (scale > 1) resetTransform();
-      else scale = 3;
-      lastTapTime = 0;
+
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      pinchStartDist = Math.hypot(dx, dy);
+      touchStartScale = scale;
+      touchStartX = (touches[0].clientX + touches[1].clientX) / 2;
+      touchStartY = (touches[0].clientY + touches[1].clientY) / 2;
+      touchStartTX = translateX;
+      touchStartTY = translateY;
       return;
     }
-    lastTapTime = now;
-    lastTapPos = { x: e.clientX, y: e.clientY };
-  }
 
-  function handlePointerMove(e: PointerEvent) {
-    if (!pointerActive) return;
+    if (touches.length === 1 && !touchIsPinch) {
+      touchStartX = touches[0].clientX;
+      touchStartY = touches[0].clientY;
+      touchStartScale = scale;
+      touchStartTX = translateX;
+      touchStartTY = translateY;
+      touchActive = true;
+      touchMoved = false;
 
-    const dx = Math.abs(e.clientX - pointerStartX);
-    if (!swipeHandled && dx > 30) {
-      swipeHandled = true;
+      // Double-tap detection
+      const now = Date.now();
+      const dist = Math.hypot(
+        touches[0].clientX - lastTapPos.x,
+        touches[0].clientY - lastTapPos.y,
+      );
+      if (now - lastTapTime < 300 && dist < 30) {
+        e.preventDefault();
+        if (scale > 1) resetTransform();
+        else scale = 3;
+        lastTapTime = 0;
+        touchActive = false;
+        return;
+      }
+      lastTapTime = now;
+      lastTapPos = {
+        x: touches[0].clientX,
+        y: touches[0].clientY,
+      };
     }
   }
 
-  function handlePointerUp(e: PointerEvent) {
-    if (!pointerActive) return;
-    pointerActive = false;
-
-    if (swipeHandled) {
-      const dx = e.clientX - pointerStartX;
-      if (dx < -50) goNext();
-      else if (dx > 50) goPrev();
-    }
-  }
-
-  // Pinch zoom via touch events — zoom toward pinch midpoint
-  function handleTouchMovePinch(e: TouchEvent) {
+  function handleTouchMove(e: TouchEvent) {
     if (!showZoom) return;
-    if (e.touches.length === 2) {
-      e.preventDefault();
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      const dist = Math.hypot(dx, dy);
-      const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-      const my = (e.touches[0].clientY + e.touches[1].clientY) / 2;
 
-      if (pinchStartDistance === 0) {
-        pinchStartDistance = dist;
-        pinchStartScale = scale;
-        pinchMidX = mx;
-        pinchMidY = my;
-        pinchStartTranslateX = translateX;
-        pinchStartTranslateY = translateY;
-      } else {
-        const newScale = Math.min(
-          MAX_SCALE,
-          Math.max(MIN_SCALE, pinchStartScale * (dist / pinchStartDistance)),
-        );
-        const ratio = newScale / pinchStartScale;
-        translateX = pinchMidX * (1 - ratio) + pinchStartTranslateX * ratio;
-        translateY = pinchMidY * (1 - ratio) + pinchStartTranslateY * ratio;
-        scale = newScale;
-        if (scale <= 1) {
-          translateX = 0;
-          translateY = 0;
-        }
+    const touches = e.touches;
+
+    if (touchIsPinch && touches.length === 2) {
+      e.preventDefault();
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      const dist = Math.hypot(dx, dy);
+      const mx = (touches[0].clientX + touches[1].clientX) / 2;
+      const my = (touches[0].clientY + touches[1].clientY) / 2;
+
+      const ratio = dist / pinchStartDist;
+      const newScale = Math.min(
+        MAX_SCALE,
+        Math.max(MIN_SCALE, touchStartScale * ratio),
+      );
+      const scaleRatio = newScale / touchStartScale;
+
+      translateX = mx * (1 - scaleRatio) + touchStartTX * scaleRatio;
+      translateY = my * (1 - scaleRatio) + touchStartTY * scaleRatio;
+      scale = newScale;
+      if (scale <= 1) {
+        translateX = 0;
+        translateY = 0;
+      }
+      return;
+    }
+
+    if (touchActive && touches.length === 1) {
+      const dx = touches[0].clientX - touchStartX;
+      const dy = touches[0].clientY - touchStartY;
+
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        touchMoved = true;
+      }
+
+      if (scale > 1) {
+        e.preventDefault();
+        translateX = touchStartTX + dx;
+        translateY = touchStartTY + dy;
       }
     }
   }
 
-  function resetPinch() {
-    pinchStartDistance = 0;
+  function handleTouchEnd(e: TouchEvent) {
+    if (!showZoom) return;
+
+    if (touchIsPinch && e.touches.length < 2) {
+      // Pinch ended — transition to single-finger pan if one finger remains
+      touchIsPinch = false;
+      pinchStartDist = 0;
+      if (e.touches.length === 1) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchStartTX = translateX;
+        touchStartTY = translateY;
+        touchActive = true;
+        touchMoved = false;
+        return;
+      }
+    }
+
+    if (touchActive && touchMoved && scale <= 1) {
+      const t = e.changedTouches[0];
+      if (t) {
+        const dx = t.clientX - touchStartX;
+        if (dx < -50) goNext();
+        else if (dx > 50) goPrev();
+      }
+    }
+
+    if (e.touches.length === 0) {
+      touchActive = false;
+      touchMoved = false;
+    }
   }
 
   // === Download and copy ===
@@ -339,11 +390,10 @@
   onmousemove={handleMouseMove}
   onmouseup={handleMouseUp}
   onmouseleave={handleMouseUp}
-  onpointerdown={handlePointerDown}
-  onpointermove={handlePointerMove}
-  onpointerup={handlePointerUp}
-  ontouchmove={handleTouchMovePinch}
-  ontouchend={resetPinch}
+  ontouchstart={(e) => handleTouchStart(e)}
+  ontouchmove={(e) => handleTouchMove(e)}
+  ontouchend={(e) => handleTouchEnd(e)}
+  ontouchcancel={(e) => handleTouchEnd(e)}
   role="dialog"
 >
   <!-- Toolbar -->
@@ -557,6 +607,12 @@
   {#if showInfo && currentImage}
     <div
       class="md:hidden fixed inset-x-0 bottom-0 z-[60] bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-700/50 rounded-t-2xl shadow-2xl"
+      onpointerdown={(e) => e.stopPropagation()}
+      onpointermove={(e) => e.stopPropagation()}
+      onpointerup={(e) => e.stopPropagation()}
+      ontouchstart={(e) => e.stopPropagation()}
+      ontouchmove={(e) => e.stopPropagation()}
+      ontouchend={(e) => e.stopPropagation()}
       style="height: 50vh; transform: translateY({sheetYpx()}px); transition: {sheetDragging
         ? 'none'
         : 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)'};"
