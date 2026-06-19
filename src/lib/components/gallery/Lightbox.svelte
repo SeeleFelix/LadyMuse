@@ -76,6 +76,44 @@
   // Copy feedback
   let copied = $state(false);
 
+  // Mobile info sheet
+  let infoSheetOpen = $state(false);
+  let sheetOffset = $state(0);
+  let sheetDragging = $state(false);
+  let sheetStartY = $state(0);
+  let sheetStartOffset = $state(0);
+
+  function openInfoSheet() {
+    infoSheetOpen = true;
+    sheetOffset = 0;
+  }
+
+  function closeInfoSheet() {
+    infoSheetOpen = false;
+    sheetOffset = 0;
+  }
+
+  function handleSheetPointerDown(e: PointerEvent) {
+    sheetDragging = true;
+    sheetStartY = e.clientY;
+    sheetStartOffset = sheetOffset;
+    (e.target as HTMLElement)?.setPointerCapture?.(e.pointerId);
+  }
+
+  function handleSheetPointerMove(e: PointerEvent) {
+    if (!sheetDragging) return;
+    sheetOffset = Math.max(0, sheetStartOffset + (sheetStartY - e.clientY));
+  }
+
+  function handleSheetPointerUp(_e: PointerEvent) {
+    sheetDragging = false;
+    if (sheetOffset > 60) {
+      openInfoSheet();
+    } else {
+      closeInfoSheet();
+    }
+  }
+
   const MIN_SCALE = 0.1;
   const MAX_SCALE = 10;
 
@@ -410,9 +448,9 @@
   </div>
 
   <!-- Image area + optional info panel -->
-  <div class="flex-1 flex flex-col md:flex-row overflow-hidden">
+  <div class="flex-1 flex overflow-hidden">
     <div
-      class="flex-1 flex items-center justify-center overflow-hidden relative min-h-0"
+      class="flex-1 flex items-center justify-center overflow-hidden relative"
     >
       {#if currentImage}
         <!-- Navigation arrows (hidden on mobile, replaced by swipe) -->
@@ -479,9 +517,10 @@
       {/if}
     </div>
 
+    <!-- Desktop: full sidebar -->
     {#if showInfo && currentImage}
       <div
-        class="w-full md:w-80 shrink-0 border-t md:border-t-0 md:border-l border-zinc-800 bg-zinc-900/80 overflow-y-auto p-4 max-h-[45vh] md:max-h-none"
+        class="hidden md:block w-80 shrink-0 border-l border-zinc-800 bg-zinc-900/80 overflow-y-auto p-4"
       >
         <div class="text-xs text-zinc-500 mb-3">图片信息</div>
         <ImageInfo
@@ -504,6 +543,63 @@
       </div>
     {/if}
   </div>
+
+  <!-- Mobile: draggable bottom sheet for image info -->
+  {#if showInfo && currentImage}
+    <div
+      class="md:hidden fixed inset-x-0 bottom-0 z-[60] bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-700/50 rounded-t-2xl shadow-2xl"
+      style="height: 50vh; transform: translateY(calc(100% - 48px - {sheetOffset}px)); transition: {sheetDragging
+        ? 'none'
+        : 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)'};"
+    >
+      <!-- Handle area (collapsed: 48px, always visible) -->
+      <div
+        class="flex flex-col items-center pt-3 pb-2 cursor-pointer select-none touch-none"
+        onclick={() => (infoSheetOpen ? closeInfoSheet() : openInfoSheet())}
+        onpointerdown={handleSheetPointerDown}
+        onpointermove={handleSheetPointerMove}
+        onpointerup={handleSheetPointerUp}
+        role="button"
+        tabindex="0"
+      >
+        <div class="w-8 h-1 rounded-full bg-zinc-500/60 mb-2"></div>
+        <div class="flex items-center gap-2 text-xs">
+          <span class="text-zinc-400">图片信息</span>
+          {#if (currentImage.rating ?? 0) > 0}
+            <span class="text-amber-400 text-xs">
+              {"★".repeat(currentImage.rating ?? 0)}
+            </span>
+          {/if}
+          {#if currentImage.width && currentImage.height}
+            <span class="text-zinc-500"
+              >{currentImage.width}×{currentImage.height}</span
+            >
+          {/if}
+        </div>
+      </div>
+
+      <!-- Sheet content (scrollable) -->
+      <div class="overflow-y-auto px-4 pb-6" style="height: calc(50vh - 48px);">
+        <ImageInfo
+          filename={currentImage.filename || ""}
+          fileSize={currentImage.fileSize ?? null}
+          width={currentImage.width ?? null}
+          height={currentImage.height ?? null}
+          fileFormat={currentImage.fileFormat ?? null}
+          rating={currentImage.rating ?? null}
+          extractedModels={currentImage.extractedModels ?? []}
+          extractedLoras={currentImage.extractedLoras ?? []}
+          extractedSamplers={currentImage.extractedSamplers ?? []}
+          extractedSchedulers={currentImage.extractedSchedulers ?? []}
+          steps={currentImage.steps ?? null}
+          cfgScale={currentImage.cfgScale ?? null}
+          seed={currentImage.seed ?? null}
+          positivePrompt={currentImage.positivePrompt ?? null}
+          negativePrompt={currentImage.negativePrompt ?? null}
+        />
+      </div>
+    </div>
+  {/if}
 
   <!-- Filmstrip (hidden on mobile) -->
   {#if showFilmstrip && images.length > 1}
