@@ -1,8 +1,8 @@
 import { json } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types";
 import { resolveImagePath } from "$lib/server/comfyui-browser";
-import { existsSync } from "node:fs";
-import sharp from "sharp";
+import { existsSync, readFileSync } from "node:fs";
+import { stripPngMetadata } from "$lib/server/strip-png-metadata";
 
 export const GET: RequestHandler = async ({ params }) => {
   const relativePath = decodeURIComponent(params.path);
@@ -12,27 +12,22 @@ export const GET: RequestHandler = async ({ params }) => {
     return json({ error: "Not found" }, { status: 404 });
   }
 
+  const buf = readFileSync(absPath);
   const ext = absPath.split(".").pop()?.toLowerCase() || "png";
+
   const mimeMap: Record<string, string> = {
     png: "image/png",
     jpg: "image/jpeg",
     jpeg: "image/jpeg",
     webp: "image/webp",
   };
-  const contentType = mimeMap[ext] || "image/png";
 
-  const targetFormat =
-    ext === "jpg" || ext === "jpeg" ? "jpeg" : ext === "webp" ? "webp" : "png";
+  const body = ext === "png" ? stripPngMetadata(buf) : buf;
 
-  // Strip all metadata (sharp strips text chunks by default when re-encoding).
-  // ComfyUI workflow data embedded in PNG tEXt chunks is removed.
-  // Pixel data is lossless — only encoding, no quality change.
-  const buffer = await sharp(absPath).toFormat(targetFormat).toBuffer();
-
-  return new Response(new Uint8Array(buffer), {
+  return new Response(body, {
     headers: {
-      "Content-Type": contentType,
-      "Content-Length": buffer.length.toString(),
+      "Content-Type": mimeMap[ext] || "image/png",
+      "Content-Length": body.length.toString(),
       "Cache-Control": "public, max-age=604800",
     },
   });
