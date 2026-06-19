@@ -135,6 +135,7 @@
     if (idx >= 0) {
       lightboxIndex = idx;
       lightboxOpen = true;
+      syncLightboxUrl(idx, false);
     }
   }
 
@@ -269,6 +270,7 @@
     if (idx >= 0) {
       lightboxIndex = idx;
       lightboxOpen = true;
+      syncLightboxUrl(idx, false);
     }
     contextMenuVisible = false;
   }
@@ -389,9 +391,39 @@
     deleteConfirm = null;
   }
 
+  // Lightbox URL sync
+  function syncLightboxUrl(index: number | null, replace: boolean) {
+    const url = new URL(window.location.href);
+    if (index !== null) {
+      url.searchParams.set("img", String(index));
+    } else {
+      url.searchParams.delete("img");
+    }
+    if (replace) {
+      history.replaceState(history.state, "", url);
+    } else {
+      history.pushState(history.state, "", url);
+    }
+  }
+
+  function handlePopState() {
+    const params = new URLSearchParams(window.location.search);
+    const imgParam = params.get("img");
+    if (imgParam) {
+      const idx = parseInt(imgParam, 10);
+      if (!isNaN(idx) && idx >= 0 && idx < store.images.length) {
+        lightboxIndex = idx;
+        lightboxOpen = true;
+      }
+    } else {
+      lightboxOpen = false;
+    }
+  }
+
   // Lightbox handlers
   function handleLightboxNavigate(index: number) {
     lightboxIndex = index;
+    syncLightboxUrl(index, true);
     if (store.images[index]) {
       store.select(store.images[index].relativePath, false, false);
     }
@@ -464,7 +496,17 @@
     const { disconnect } = createSSEClient((event) =>
       store.handleSSEEvent(event),
     );
-    return () => disconnect();
+
+    window.addEventListener("popstate", handlePopState);
+
+    // Check if URL has img param on initial load
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("img")) handlePopState();
+
+    return () => {
+      disconnect();
+      window.removeEventListener("popstate", handlePopState);
+    };
   });
 </script>
 
@@ -607,7 +649,10 @@
     images={lightboxImages}
     currentIndex={lightboxIndex}
     contextMenuOpen={contextMenuVisible}
-    onclose={() => (lightboxOpen = false)}
+    onclose={() => {
+      lightboxOpen = false;
+      history.back();
+    }}
     onnavigate={handleLightboxNavigate}
     oncontextmenu={handleLightboxContextmenu}
     ondownload={handleLightboxDownload}

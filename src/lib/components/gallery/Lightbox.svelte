@@ -64,6 +64,10 @@
   // Pinch state
   let pinchStartDistance = $state(0);
   let pinchStartScale = $state(1);
+  let pinchMidX = $state(0);
+  let pinchMidY = $state(0);
+  let pinchStartTranslateX = $state(0);
+  let pinchStartTranslateY = $state(0);
 
   // Double-tap state
   let lastTapTime = $state(0);
@@ -194,7 +198,7 @@
     }
   }
 
-  // Pinch zoom via touch events
+  // Pinch zoom via touch events — zoom toward pinch midpoint
   function handleTouchMovePinch(e: TouchEvent) {
     if (!showZoom) return;
     if (e.touches.length === 2) {
@@ -202,15 +206,25 @@
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       const dist = Math.hypot(dx, dy);
+      const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const my = (e.touches[0].clientY + e.touches[1].clientY) / 2;
 
       if (pinchStartDistance === 0) {
         pinchStartDistance = dist;
         pinchStartScale = scale;
+        pinchMidX = mx;
+        pinchMidY = my;
+        pinchStartTranslateX = translateX;
+        pinchStartTranslateY = translateY;
       } else {
-        scale = Math.min(
+        const newScale = Math.min(
           MAX_SCALE,
           Math.max(MIN_SCALE, pinchStartScale * (dist / pinchStartDistance)),
         );
+        const ratio = newScale / pinchStartScale;
+        translateX = pinchMidX * (1 - ratio) + pinchStartTranslateX * ratio;
+        translateY = pinchMidY * (1 - ratio) + pinchStartTranslateY * ratio;
+        scale = newScale;
         if (scale <= 1) {
           translateX = 0;
           translateY = 0;

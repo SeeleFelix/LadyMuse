@@ -22,20 +22,39 @@
 
   let totalCount = $derived(images.length);
 
-  function handleCardClick(path: string) {
-    const idx = images.findIndex((img) => img.relativePath === path);
-    if (idx !== -1) {
-      lightboxIndex = idx;
-      lightboxOpen = true;
+  function syncLightboxUrl(index: number | null, replace: boolean) {
+    const url = new URL(window.location.href);
+    if (index !== null) {
+      url.searchParams.set("img", String(index));
+    } else {
+      url.searchParams.delete("img");
     }
+    if (replace) {
+      history.replaceState(history.state, "", url);
+    } else {
+      history.pushState(history.state, "", url);
+    }
+  }
+
+  function openLightbox(index: number) {
+    lightboxIndex = index;
+    lightboxOpen = true;
+    syncLightboxUrl(index, false);
   }
 
   function closeLightbox() {
     lightboxOpen = false;
+    history.back();
   }
 
   function handleLightboxNavigate(index: number) {
     lightboxIndex = index;
+    syncLightboxUrl(index, true);
+  }
+
+  function handleCardClick(path: string) {
+    const idx = images.findIndex((img) => img.relativePath === path);
+    if (idx !== -1) openLightbox(idx);
   }
 
   async function handleDownload(imageUrl: string, filename: string) {
@@ -64,6 +83,20 @@
     window.location.reload();
   }
 
+  function handlePopState() {
+    const params = new URLSearchParams(window.location.search);
+    const imgParam = params.get("img");
+    if (imgParam) {
+      const idx = parseInt(imgParam, 10);
+      if (!isNaN(idx) && idx >= 0 && idx < images.length) {
+        lightboxIndex = idx;
+        lightboxOpen = true;
+      }
+    } else {
+      lightboxOpen = false;
+    }
+  }
+
   onMount(() => {
     loaded = true;
 
@@ -76,7 +109,16 @@
       { rootMargin: "200px" },
     );
 
-    return () => observer?.disconnect();
+    window.addEventListener("popstate", handlePopState);
+
+    // Check if URL has img param on initial load
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("img")) handlePopState();
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("popstate", handlePopState);
+    };
   });
 
   $effect(() => {
@@ -183,7 +225,7 @@
         negativePrompt: img.negativePrompt,
       }))}
       currentIndex={lightboxIndex}
-      showZoom={false}
+      showZoom={true}
       showCopyLink={false}
       showFilmstrip={false}
       showInfo={true}
