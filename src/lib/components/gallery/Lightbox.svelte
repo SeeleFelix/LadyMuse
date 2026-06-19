@@ -1,16 +1,48 @@
 <script lang="ts">
+  import ImageInfo from "./ImageInfo.svelte";
+
   let {
     images = [],
     currentIndex = 0,
     contextMenuOpen = false,
+    showZoom = true,
+    showDownload = true,
+    showCopyLink = true,
+    showFilmstrip = true,
+    showInfo = false,
+    imageUrlBase = "/api/comfyui/images",
     onclose,
     onnavigate,
     oncontextmenu,
     ondownload,
   }: {
-    images: { relativePath: string; filename: string; modifiedAt?: string }[];
+    images: {
+      relativePath: string;
+      filename: string;
+      modifiedAt?: string;
+      width?: number | null;
+      height?: number | null;
+      fileSize?: number | null;
+      fileFormat?: string | null;
+      rating?: number | null;
+      extractedModels?: string[];
+      extractedLoras?: string[];
+      extractedSamplers?: string[];
+      extractedSchedulers?: string[];
+      steps?: number | null;
+      cfgScale?: number | null;
+      seed?: string | null;
+      positivePrompt?: string | null;
+      negativePrompt?: string | null;
+    }[];
     currentIndex: number;
     contextMenuOpen?: boolean;
+    showZoom?: boolean;
+    showDownload?: boolean;
+    showCopyLink?: boolean;
+    showFilmstrip?: boolean;
+    showInfo?: boolean;
+    imageUrlBase?: string;
     onclose: () => void;
     onnavigate?: (index: number) => void;
     oncontextmenu?: (e: MouseEvent) => void;
@@ -52,7 +84,7 @@
   }
 
   function getImageUrl(relativePath: string, modifiedAt?: string): string {
-    const base = `/api/comfyui/images/${encodeURIComponent(relativePath)}`;
+    const base = `/${imageUrlBase.replace(/^\/+/, "")}/${encodeURIComponent(relativePath)}`;
     return modifiedAt ? `${base}?t=${new Date(modifiedAt).getTime()}` : base;
   }
 
@@ -72,6 +104,7 @@
 
   // === Desktop mouse handlers ===
   function handleWheel(e: WheelEvent) {
+    if (!showZoom) return;
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.15 : 0.15;
     scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale + delta * scale));
@@ -82,6 +115,7 @@
   }
 
   function handleMouseDown(e: MouseEvent) {
+    if (!showZoom) return;
     if (scale > 1) {
       isDragging = true;
       didDrag = false;
@@ -90,6 +124,7 @@
   }
 
   function handleMouseMove(e: MouseEvent) {
+    if (!showZoom) return;
     if (isDragging && scale > 1) {
       const nx = e.clientX - dragStart.x;
       const ny = e.clientY - dragStart.y;
@@ -105,6 +140,7 @@
   }
 
   function toggleZoom(e: MouseEvent) {
+    if (!showZoom) return;
     if (didDrag) {
       didDrag = false;
       return;
@@ -118,6 +154,7 @@
 
   // === Touch / pointer handlers ===
   function handlePointerDown(e: PointerEvent) {
+    if (!showZoom) return;
     if (e.pointerType !== "touch" || scale > 1) return;
     pointerStartX = e.clientX;
     pointerActive = true;
@@ -159,6 +196,7 @@
 
   // Pinch zoom via touch events
   function handleTouchMovePinch(e: TouchEvent) {
+    if (!showZoom) return;
     if (e.touches.length === 2) {
       e.preventDefault();
       const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -253,42 +291,73 @@
       {currentImage?.filename || ""}
     </div>
     <div class="flex items-center gap-2 md:gap-3">
-      <span class="text-xs text-zinc-500">{Math.round(scale * 100)}%</span>
-      <span class="text-xs text-zinc-500"
-        >{currentIndex + 1}/{images.length}</span
-      >
-      <button
-        onclick={resetTransform}
-        class="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-zinc-800"
-        >适应</button
-      >
-      <button
-        onclick={() => (scale = 1)}
-        class="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-zinc-800 hidden md:block"
-        >1:1</button
-      >
+      {#if showZoom}
+        <span class="text-xs text-zinc-500">{Math.round(scale * 100)}%</span>
+        <span class="text-xs text-zinc-500"
+          >{currentIndex + 1}/{images.length}</span
+        >
+        <button
+          onclick={resetTransform}
+          class="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-zinc-800"
+          >适应</button
+        >
+        <button
+          onclick={() => (scale = 1)}
+          class="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-zinc-800 hidden md:block"
+          >1:1</button
+        >
+      {:else}
+        <span class="text-xs text-zinc-500"
+          >{currentIndex + 1}/{images.length}</span
+        >
+      {/if}
 
       <!-- Copy link -->
-      <button
-        onclick={handleCopyLink}
-        class="text-zinc-400 hover:text-white p-1.5 rounded hover:bg-zinc-800"
-        title="复制链接"
-      >
-        {#if copied}
-          <svg
-            class="w-4 h-4 text-green-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M5 13l4 4L19 7"
-            />
-          </svg>
-        {:else}
+      {#if showCopyLink}
+        <button
+          onclick={handleCopyLink}
+          class="text-zinc-400 hover:text-white p-1.5 rounded hover:bg-zinc-800"
+          title="复制链接"
+        >
+          {#if copied}
+            <svg
+              class="w-4 h-4 text-green-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+          {:else}
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+              />
+            </svg>
+          {/if}
+        </button>
+      {/if}
+
+      <!-- Download -->
+      {#if showDownload}
+        <button
+          onclick={handleDownload}
+          class="text-zinc-400 hover:text-white p-1.5 rounded hover:bg-zinc-800"
+          title="下载"
+        >
           <svg
             class="w-4 h-4"
             fill="none"
@@ -299,32 +368,11 @@
               stroke-linecap="round"
               stroke-linejoin="round"
               stroke-width="2"
-              d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
             />
           </svg>
-        {/if}
-      </button>
-
-      <!-- Download -->
-      <button
-        onclick={handleDownload}
-        class="text-zinc-400 hover:text-white p-1.5 rounded hover:bg-zinc-800"
-        title="下载"
-      >
-        <svg
-          class="w-4 h-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-          />
-        </svg>
-      </button>
+        </button>
+      {/if}
 
       <button
         onclick={onclose}
@@ -347,73 +395,104 @@
     </div>
   </div>
 
-  <!-- Image area -->
-  <div class="flex-1 flex items-center justify-center overflow-hidden relative">
-    {#if currentImage}
-      <!-- Navigation arrows (hidden on mobile, replaced by swipe) -->
-      {#if currentIndex > 0}
-        <button
-          onclick={goPrev}
-          class="absolute left-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 hidden md:block"
-        >
-          <svg
-            class="w-6 h-6"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+  <!-- Image area + optional info panel -->
+  <div class="flex-1 flex overflow-hidden">
+    <div
+      class="flex-1 flex items-center justify-center overflow-hidden relative"
+    >
+      {#if currentImage}
+        <!-- Navigation arrows (hidden on mobile, replaced by swipe) -->
+        {#if currentIndex > 0}
+          <button
+            onclick={goPrev}
+            class="absolute left-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 hidden md:block"
           >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
-        </button>
-      {/if}
-      {#if currentIndex < images.length - 1}
-        <button
-          onclick={goNext}
-          class="absolute right-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 hidden md:block"
-        >
-          <svg
-            class="w-6 h-6"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+            <svg
+              class="w-6 h-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M15 19l-7-7 7-7"
+              />
+            </svg>
+          </button>
+        {/if}
+        {#if currentIndex < images.length - 1}
+          <button
+            onclick={goNext}
+            class="absolute right-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 hidden md:block"
           >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 5l7 7-7 7"
-            />
-          </svg>
-        </button>
-      {/if}
+            <svg
+              class="w-6 h-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 5l7 7-7 7"
+              />
+            </svg>
+          </button>
+        {/if}
 
-      <img
-        src={getImageUrl(currentImage.relativePath, currentImage.modifiedAt)}
-        alt=""
-        onclick={(e) => toggleZoom(e)}
-        oncontextmenu={(e) => {
-          e.preventDefault();
-          oncontextmenu?.(e);
-        }}
-        class="max-w-full max-h-full select-none {scale <= 1
-          ? 'object-contain cursor-zoom-in'
-          : 'cursor-zoom-out'}"
-        style="transform: scale({scale}) translate({translateX /
-          scale}px, {translateY / scale}px); transition: {isDragging
-          ? 'none'
-          : 'transform 0.2s ease'}; touch-action: manipulation;"
-        draggable="false"
-      />
+        <img
+          src={getImageUrl(currentImage.relativePath, currentImage.modifiedAt)}
+          alt=""
+          onclick={(e) => toggleZoom(e)}
+          oncontextmenu={(e) => {
+            e.preventDefault();
+            oncontextmenu?.(e);
+          }}
+          class="max-w-full max-h-full select-none {showZoom && scale <= 1
+            ? 'object-contain cursor-zoom-in'
+            : showZoom
+              ? 'cursor-zoom-out'
+              : 'object-contain'}"
+          style="transform: scale({scale}) translate({translateX /
+            scale}px, {translateY / scale}px); transition: {isDragging
+            ? 'none'
+            : 'transform 0.2s ease'}; touch-action: manipulation;"
+          draggable="false"
+        />
+      {/if}
+    </div>
+
+    {#if showInfo && currentImage}
+      <div
+        class="w-80 shrink-0 border-l border-zinc-800 bg-zinc-900/80 overflow-y-auto p-4"
+      >
+        <div class="text-xs text-zinc-500 mb-3">图片信息</div>
+        <ImageInfo
+          filename={currentImage.filename || ""}
+          fileSize={currentImage.fileSize ?? null}
+          width={currentImage.width ?? null}
+          height={currentImage.height ?? null}
+          fileFormat={currentImage.fileFormat ?? null}
+          rating={currentImage.rating ?? null}
+          extractedModels={currentImage.extractedModels ?? []}
+          extractedLoras={currentImage.extractedLoras ?? []}
+          extractedSamplers={currentImage.extractedSamplers ?? []}
+          extractedSchedulers={currentImage.extractedSchedulers ?? []}
+          steps={currentImage.steps ?? null}
+          cfgScale={currentImage.cfgScale ?? null}
+          seed={currentImage.seed ?? null}
+          positivePrompt={currentImage.positivePrompt ?? null}
+          negativePrompt={currentImage.negativePrompt ?? null}
+        />
+      </div>
     {/if}
   </div>
 
   <!-- Filmstrip (hidden on mobile) -->
-  {#if images.length > 1}
+  {#if showFilmstrip && images.length > 1}
     <div
       class="h-16 bg-black/50 hidden md:flex items-center gap-1 px-4 overflow-x-auto"
     >
