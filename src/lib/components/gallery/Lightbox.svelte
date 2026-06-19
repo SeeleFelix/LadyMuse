@@ -226,6 +226,7 @@
     }
 
     if (touches.length === 1 && !touchIsPinch) {
+      e.preventDefault(); // suppress synthetic click + browser scroll
       touchStartX = touches[0].clientX;
       touchStartY = touches[0].clientY;
       touchStartScale = scale;
@@ -385,6 +386,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="fixed inset-0 z-50 bg-black/95 flex flex-col"
+  style="touch-action: none;"
   onwheel={handleWheel}
   onmousedown={handleMouseDown}
   onmousemove={handleMouseMove}
@@ -648,7 +650,7 @@
       <!-- Sheet content (scrollable) -->
       <div
         class="overflow-y-auto px-4 pb-6"
-        style="height: calc(50vh - {SHEET_HANDLE_H}px);"
+        style="height: calc(50vh - {SHEET_HANDLE_H}px); touch-action: pan-y;"
       >
         <ImageInfo
           filename={currentImage.filename || ""}
