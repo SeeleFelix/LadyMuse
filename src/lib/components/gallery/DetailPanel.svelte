@@ -3,7 +3,7 @@
   import ColorLabel from "./ColorLabel.svelte";
   import FlagButtons from "./FlagButtons.svelte";
   import TagEditor from "./TagEditor.svelte";
-  import MetadataViewer from "./MetadataViewer.svelte";
+  import ImageInfo from "./ImageInfo.svelte";
   import type { ImageResult } from "$lib/stores/gallery-store.svelte";
 
   interface Tag {
@@ -34,15 +34,6 @@
     ondelete: () => void;
   } = $props();
 
-  let showPrompt = $state(false);
-
-  function formatFileSize(bytes: number | null): string {
-    if (!bytes) return "-";
-    if (bytes < 1024) return `${bytes}B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
-  }
-
   function formatDate(d: string | null): string {
     if (!d) return "";
     return new Date(d).toLocaleDateString("zh-CN", {
@@ -69,41 +60,6 @@
       url: image ? getImageUrl() : null,
     });
   });
-
-  function hasMetadata(): boolean {
-    if (!image) return false;
-    return !!(
-      image.extractedModels.length > 0 ||
-      image.extractedLoras.length > 0 ||
-      image.extractedSamplers.length > 0 ||
-      image.steps ||
-      image.cfgScale ||
-      image.seed ||
-      image.positivePrompt ||
-      image.negativePrompt
-    );
-  }
-
-  // Convert ImageResult to MetadataViewer format
-  function getMetadata() {
-    if (!image) return null;
-    return {
-      models: image.extractedModels,
-      loras: image.extractedLoras,
-      samplers: image.extractedSamplers.map((name, i) => ({
-        id: `sampler-${i}`,
-        classType: name,
-        seed: image.seed ? parseInt(image.seed, 10) : null,
-        steps: image.steps,
-        cfg: image.cfgScale,
-        samplerName: name,
-        scheduler: image.extractedSchedulers[i] || null,
-        denoise: null,
-      })),
-      positivePrompts: image.positivePrompt ? [image.positivePrompt] : [],
-      negativePrompts: image.negativePrompt ? [image.negativePrompt] : [],
-    };
-  }
 
   async function sendToComfyUI() {
     if (!image || !image.positivePrompt) return;
@@ -187,22 +143,22 @@
       {/if}
     </div>
 
-    <!-- Rating -->
+    <!-- Rating (editable) -->
     <div class="mb-3">
       <div class="text-xs text-zinc-500 mb-1">评分</div>
-      <StarRating value={image.rating ?? 0} onchange={onrate} />
+      <StarRating value={image.rating ?? 0} {onrate} />
     </div>
 
     <!-- Color Label -->
     <div class="mb-3">
       <div class="text-xs text-zinc-500 mb-1">颜色标记</div>
-      <ColorLabel value={image.colorLabel ?? null} onchange={oncolor} />
+      <ColorLabel value={image.colorLabel ?? null} {oncolor} />
     </div>
 
-    <!-- Pick/Reject -->
+    <!-- Flag -->
     <div class="mb-3">
       <div class="text-xs text-zinc-500 mb-1">标记</div>
-      <FlagButtons flag={image.flag ?? null} onchange={onflag} />
+      <FlagButtons flag={image.flag ?? null} {onflag} />
     </div>
 
     <!-- Tags -->
@@ -216,56 +172,31 @@
       />
     </div>
 
-    <!-- File info -->
-    <div class="space-y-2 mb-4">
-      <div class="text-xs text-zinc-500 mb-2">文件信息</div>
-      <div class="text-xs">
-        <span class="text-zinc-500">文件名:</span>
-        <span class="text-zinc-300" title={getFilename()}>{getFilename()}</span>
-      </div>
-      <div class="text-xs">
-        <span class="text-zinc-500">大小:</span>
-        <span class="text-zinc-300">{formatFileSize(image.fileSize)}</span>
-      </div>
-      <div class="text-xs">
-        <span class="text-zinc-500">尺寸:</span>
-        <span class="text-zinc-300"
-          >{image.width && image.height
-            ? `${image.width}×${image.height}`
-            : "-"}</span
+    <!-- File info + metadata (read-only, extracted) -->
+    <div class="mb-2">
+      <div class="text-xs text-zinc-500 mb-1">
+        创建时间: <span class="text-zinc-300"
+          >{formatDate(image.createdAt)}</span
         >
       </div>
-      <div class="text-xs">
-        <span class="text-zinc-500">格式:</span>
-        <span class="text-zinc-300">{image.fileFormat || "-"}</span>
-      </div>
-      <div class="text-xs">
-        <span class="text-zinc-500">创建时间:</span>
-        <span class="text-zinc-300">{formatDate(image.createdAt)}</span>
-      </div>
     </div>
-
-    <!-- Metadata -->
-    {#if hasMetadata()}
-      <div class="mb-4">
-        <div class="flex items-center justify-between mb-2">
-          <div class="text-xs text-zinc-500">生成参数</div>
-          {#if image.positivePrompt || image.negativePrompt}
-            <button
-              onclick={() => (showPrompt = !showPrompt)}
-              class="text-xs text-zinc-400 hover:text-zinc-300"
-            >
-              {showPrompt ? "隐藏" : "显示"}提示词
-            </button>
-          {/if}
-        </div>
-        <MetadataViewer
-          metadata={getMetadata()}
-          width={image.width}
-          height={image.height}
-        />
-      </div>
-    {/if}
+    <ImageInfo
+      filename={getFilename()}
+      fileSize={image.fileSize}
+      width={image.width}
+      height={image.height}
+      fileFormat={image.fileFormat}
+      rating={image.rating}
+      extractedModels={image.extractedModels}
+      extractedLoras={image.extractedLoras}
+      extractedSamplers={image.extractedSamplers}
+      extractedSchedulers={image.extractedSchedulers}
+      steps={image.steps}
+      cfgScale={image.cfgScale}
+      seed={image.seed}
+      positivePrompt={image.positivePrompt}
+      negativePrompt={image.negativePrompt}
+    />
 
     <!-- Send to ComfyUI button -->
     {#if image.positivePrompt}
