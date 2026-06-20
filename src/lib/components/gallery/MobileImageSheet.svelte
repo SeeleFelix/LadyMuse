@@ -56,9 +56,9 @@
   }
 </script>
 
-<!-- Collapsed bar -->
+<!-- Collapsed bar (mobile only) -->
 <button
-  class="flex items-center justify-between w-full px-4 py-2.5 bg-zinc-900/90 backdrop-blur border-t border-zinc-700/50"
+  class="md:hidden flex items-center justify-between w-full px-4 py-2.5 bg-zinc-900/90 backdrop-blur border-t border-zinc-700/50"
   onclick={toggleExpanded}
 >
   <div class="flex items-center gap-2.5 min-w-0">
@@ -92,13 +92,13 @@
 <!-- Expanded overlay -->
 {#if expanded}
   <button
-    class="fixed inset-0 z-[65] bg-black/60"
+    class="md:hidden fixed inset-0 z-[65] bg-black/60"
     onclick={toggleExpanded}
     aria-label="关闭详情"
   ></button>
 
   <div
-    class="fixed inset-x-0 bottom-0 z-[70] bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-700/50 rounded-t-2xl shadow-2xl max-h-[60vh] flex flex-col"
+    class="md:hidden fixed inset-x-0 bottom-0 z-[70] bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-700/50 rounded-t-2xl shadow-2xl max-h-[60vh] flex flex-col"
   >
     <!-- Header -->
     <div
