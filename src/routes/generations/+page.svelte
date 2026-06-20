@@ -170,6 +170,8 @@
       fileSize: img.fileSize,
       fileFormat: img.fileFormat,
       rating: img.rating,
+      colorLabel: img.colorLabel,
+      flag: img.flag,
       extractedModels: img.extractedModels,
       extractedLoras: img.extractedLoras,
       extractedSamplers: img.extractedSamplers,

@@ -30,6 +30,8 @@
       fileSize?: number | null;
       fileFormat?: string | null;
       rating?: number | null;
+      colorLabel?: string | null;
+      flag?: string | null;
       extractedModels?: string[];
       extractedLoras?: string[];
       extractedSamplers?: string[];
@@ -551,6 +553,8 @@
           height={currentImage.height ?? null}
           fileFormat={currentImage.fileFormat ?? null}
           rating={currentImage.rating ?? null}
+          colorLabel={currentImage.colorLabel ?? null}
+          flag={currentImage.flag ?? null}
           extractedModels={currentImage.extractedModels ?? []}
           extractedLoras={currentImage.extractedLoras ?? []}
           extractedSamplers={currentImage.extractedSamplers ?? []}
@@ -576,6 +580,8 @@
         height={currentImage.height ?? null}
         fileFormat={currentImage.fileFormat ?? null}
         rating={currentImage.rating ?? null}
+        colorLabel={currentImage.colorLabel ?? null}
+        flag={currentImage.flag ?? null}
         extractedModels={currentImage.extractedModels ?? []}
         extractedLoras={currentImage.extractedLoras ?? []}
         extractedSamplers={currentImage.extractedSamplers ?? []}

@@ -106,7 +106,7 @@
 
 <!-- Desktop: sidebar panel -->
 <div
-  class="hidden md:block w-80 shrink-0 border-l border-zinc-800 bg-zinc-900/80 overflow-y-auto p-4"
+  class="hidden md:block w-80 shrink-0 border-l border-zinc-800 bg-zinc-900/80 overflow-y-auto p-4 h-full"
 >
   <div class="flex items-center justify-between mb-4">
     <h3 class="text-sm font-medium text-zinc-300">图片详情</h3>
