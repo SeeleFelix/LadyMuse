@@ -1,5 +1,6 @@
 <script lang="ts">
   import ImageDetail from "./ImageDetail.svelte";
+  import Panzoom from "@panzoom/panzoom";
 
   let {
     images = [],
@@ -62,82 +63,46 @@
   } = $props();
 
   let scale = $state(1);
-  let translateX = $state(0);
-  let translateY = $state(0);
-  let isDragging = $state(false);
-  let didDrag = $state(false);
-  let dragStart = { x: 0, y: 0 };
-
-  // === Touch state (single system for all mobile interactions) ===
-  let touchStartX = $state(0);
-  let touchStartY = $state(0);
-  let touchStartScale = $state(1);
-  let touchStartTX = $state(0);
-  let touchStartTY = $state(0);
-  let touchActive = $state(false);
-  let touchMoved = $state(false);
-  let touchIsPinch = $state(false);
-  let pinchStartDist = $state(0);
-
-  // Double-tap state
-  let lastTapTime = $state(0);
-  let lastTapPos = { x: 0, y: 0 };
-
-  // Copy feedback
   let copied = $state(false);
 
-  // Two-layer transform: wrapper(translate) + image(scale) — production standard
-  let wrapperEl = $state<HTMLDivElement>();
   let imageEl = $state<HTMLImageElement>();
+  let pz = $state<ReturnType<typeof Panzoom>>();
+  let didDrag = false;
+  let pointerStartX = 0;
 
-  function applyGestureTransform(sx: number, tx: number, ty: number) {
-    if (!wrapperEl || !imageEl) return;
-    wrapperEl.style.transform = `translate(${tx}px, ${ty}px)`;
-    wrapperEl.style.transition = "none";
-    imageEl.style.transform = `scale(${sx})`;
-    imageEl.style.transition = "none";
-  }
+  $effect(() => {
+    const el = imageEl;
+    if (!el) return;
+    pz?.destroy();
+    const instance = Panzoom(el, {
+      maxScale: 10,
+      minScale: 0.1,
+      handleStartEvent: () => {},
+    });
+    pz = instance;
+    const parent = el.parentElement;
+    if (parent) parent.addEventListener("wheel", instance.zoomWithWheel);
+    instance.reset();
+    scale = 1;
+    return () => instance.destroy();
+  });
 
-  function syncFromDOM() {
-    if (!wrapperEl || !imageEl) return;
-    const wm = new DOMMatrixReadOnly(getComputedStyle(wrapperEl).transform);
-    const im = new DOMMatrixReadOnly(getComputedStyle(imageEl).transform);
-    scale = Math.hypot(im.a, im.b);
-    translateX = wm.e;
-    translateY = wm.f;
-  }
-
-  function endGesture() {
-    if (!wrapperEl || !imageEl) return;
-    wrapperEl.style.transition = "transform 0.2s ease";
-    imageEl.style.transition = "transform 0.2s ease";
-    syncFromDOM();
-  }
-
-  function scheduleGestureTransform(s: number, tx: number, ty: number) {
-    const sx = Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
-    const px = sx <= 1 ? 0 : tx;
-    const py = sx <= 1 ? 0 : ty;
-    applyGestureTransform(sx, px, py);
-  }
-
-  const MIN_SCALE = 0.1;
-  const MAX_SCALE = 10;
+  $effect(() => {
+    const instance = pz;
+    if (!instance) return;
+    const timer = setInterval(() => {
+      const s = instance.getScale();
+      if (s !== scale) scale = s;
+    }, 100);
+    return () => clearInterval(timer);
+  });
 
   let currentImage = $derived(images[currentIndex]);
 
-  function resetTransform() {
-    if (wrapperEl) {
-      wrapperEl.style.transform = "";
-      wrapperEl.style.transition = "transform 0.2s ease";
-    }
-    if (imageEl) {
-      imageEl.style.transform = "";
-      imageEl.style.transition = "transform 0.2s ease";
-    }
+  function resetZoom() {
+    pz?.reset();
     scale = 1;
-    translateX = 0;
-    translateY = 0;
+    didDrag = false;
   }
 
   function getImageUrl(relativePath: string, modifiedAt?: string): string {
@@ -147,237 +112,57 @@
 
   function goNext() {
     if (currentIndex < images.length - 1) {
-      resetTransform();
+      resetZoom();
       onnavigate?.(currentIndex + 1);
     }
   }
 
   function goPrev() {
     if (currentIndex > 0) {
-      resetTransform();
+      resetZoom();
       onnavigate?.(currentIndex - 1);
     }
   }
 
-  // === Desktop mouse handlers ===
-  function handleWheel(e: WheelEvent) {
+  function handlePtrDown(e: PointerEvent) {
     if (!showZoom) return;
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.15 : 0.15;
-    const newScale = Math.min(
-      MAX_SCALE,
-      Math.max(MIN_SCALE, scale + delta * scale),
-    );
-    const newTX = newScale <= 1 ? 0 : translateX;
-    const newTY = newScale <= 1 ? 0 : translateY;
-    applyGestureTransform(newScale, newTX, newTY);
-    scale = newScale;
-    translateX = newTX;
-    translateY = newTY;
+    pointerStartX = e.clientX;
+    didDrag = false;
   }
 
-  function handleMouseDown(e: MouseEvent) {
+  function handlePtrMove(e: PointerEvent) {
     if (!showZoom) return;
-    if (scale > 1) {
-      isDragging = true;
-      didDrag = false;
-      dragStart = { x: e.clientX - translateX, y: e.clientY - translateY };
+    if (Math.abs(e.clientX - pointerStartX) > 3) didDrag = true;
+  }
+
+  function handlePtrUp(e: PointerEvent) {
+    if (!showZoom) return;
+    if (pz && pz.getScale() <= 1 && didDrag) {
+      const dx = e.clientX - pointerStartX;
+      if (dx < -50) goNext();
+      else if (dx > 50) goPrev();
     }
-  }
-
-  function handleMouseMove(e: MouseEvent) {
-    if (!showZoom) return;
-    if (isDragging && scale > 1) {
-      const nx = e.clientX - dragStart.x;
-      const ny = e.clientY - dragStart.y;
-      if (Math.abs(nx - translateX) > 2 || Math.abs(ny - translateY) > 2)
-        didDrag = true;
-      scheduleGestureTransform(scale, nx, ny);
-    }
-  }
-
-  function handleMouseUp() {
-    isDragging = false;
-    endGesture();
   }
 
   function toggleZoom(e: MouseEvent) {
-    if (!showZoom) return;
-    if (e.detail === 0) return; // synthetic click from touch — ignore
+    if (!showZoom || !pz) return;
+    if (e.detail === 0) return;
     if (didDrag) {
       didDrag = false;
       return;
     }
-    if (scale > 1) {
-      resetTransform();
+    const s = pz.getScale();
+    if (s > 1) {
+      pz.reset();
+      scale = 1;
     } else {
-      // Zoom to click position — two-layer: wrapper translates, image scales
-      const rect = wrapperEl?.getBoundingClientRect();
-      const cx = rect ? e.clientX - rect.left : 0;
-      const cy = rect ? e.clientY - rect.top : 0;
-      const newScale = 3;
-      const tx = cx * (1 - newScale);
-      const ty = cy * (1 - newScale);
-      if (wrapperEl && imageEl) {
-        wrapperEl.style.transform = `translate(${tx}px, ${ty}px)`;
-        wrapperEl.style.transition = "transform 0.2s ease";
-        imageEl.style.transform = `scale(${newScale})`;
-        imageEl.style.transition = "transform 0.2s ease";
-      }
-      scale = newScale;
-      translateX = tx;
-      translateY = ty;
-    }
-  }
-
-  // === Touch handlers (mobile only — not shared with desktop) ===
-  function handleTouchStart(e: TouchEvent) {
-    if (!showZoom) return;
-
-    const touches = e.touches;
-
-    if (touches.length === 2) {
-      // Pinch start — cancel any active single-finger tracking
-      syncFromDOM(); // sync stale $state from any active pan gesture
-      touchIsPinch = true;
-      touchActive = false;
-      e.preventDefault();
-
-      const dx = touches[0].clientX - touches[1].clientX;
-      const dy = touches[0].clientY - touches[1].clientY;
-      pinchStartDist = Math.hypot(dx, dy);
-      touchStartScale = scale;
-      touchStartX = (touches[0].clientX + touches[1].clientX) / 2;
-      touchStartY = (touches[0].clientY + touches[1].clientY) / 2;
-      touchStartTX = translateX;
-      touchStartTY = translateY;
-      return;
-    }
-
-    if (touches.length === 1 && !touchIsPinch) {
-      touchStartX = touches[0].clientX;
-      touchStartY = touches[0].clientY;
-      touchStartScale = scale;
-      touchStartTX = translateX;
-      touchStartTY = translateY;
-      touchActive = true;
-      touchMoved = false;
-
-      // Double-tap detection
-      const now = Date.now();
-      const dist = Math.hypot(
-        touches[0].clientX - lastTapPos.x,
-        touches[0].clientY - lastTapPos.y,
-      );
-      if (now - lastTapTime < 300 && dist < 30) {
-        e.preventDefault();
-        if (scale > 1) {
-          resetTransform();
-        } else {
-          // Zoom to tap position — two-layer
-          const rect = wrapperEl?.getBoundingClientRect();
-          const cx = rect ? touches[0].clientX - rect.left : 0;
-          const cy = rect ? touches[0].clientY - rect.top : 0;
-          const newScale = 3;
-          const tx = cx * (1 - newScale);
-          const ty = cy * (1 - newScale);
-          if (wrapperEl && imageEl) {
-            wrapperEl.style.transform = `translate(${tx}px, ${ty}px)`;
-            wrapperEl.style.transition = "transform 0.2s ease";
-            imageEl.style.transform = `scale(${newScale})`;
-            imageEl.style.transition = "transform 0.2s ease";
-          }
-          scale = newScale;
-          translateX = tx;
-          translateY = ty;
-        }
-        lastTapTime = 0;
-        touchActive = false;
-        return;
-      }
-      lastTapTime = now;
-      lastTapPos = {
-        x: touches[0].clientX,
-        y: touches[0].clientY,
-      };
-    }
-  }
-
-  function handleTouchMove(e: TouchEvent) {
-    if (!showZoom) return;
-
-    const touches = e.touches;
-
-    if (touchIsPinch && touches.length === 2) {
-      e.preventDefault();
-      const dx = touches[0].clientX - touches[1].clientX;
-      const dy = touches[0].clientY - touches[1].clientY;
-      const dist = Math.hypot(dx, dy);
-      const mx = (touches[0].clientX + touches[1].clientX) / 2;
-      const my = (touches[0].clientY + touches[1].clientY) / 2;
-
-      const ratio = dist / pinchStartDist;
-      const newScale = Math.min(
-        MAX_SCALE,
-        Math.max(MIN_SCALE, touchStartScale * ratio),
-      );
-      const scaleRatio = newScale / touchStartScale;
-
-      scheduleGestureTransform(
-        newScale,
-        mx * (1 - scaleRatio) + touchStartTX * scaleRatio,
-        my * (1 - scaleRatio) + touchStartTY * scaleRatio,
-      );
-      return;
-    }
-
-    if (touchActive && touches.length === 1) {
-      const dx = touches[0].clientX - touchStartX;
-      const dy = touches[0].clientY - touchStartY;
-
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-        touchMoved = true;
-      }
-
-      if (scale > 1) {
-        e.preventDefault();
-        scheduleGestureTransform(scale, touchStartTX + dx, touchStartTY + dy);
-      }
-    }
-  }
-
-  function handleTouchEnd(e: TouchEvent) {
-    if (!showZoom) return;
-
-    if (touchIsPinch && e.touches.length < 2) {
-      endGesture();
-      // Pinch ended — transition to single-finger pan if one finger remains
-      touchIsPinch = false;
-      pinchStartDist = 0;
-      if (e.touches.length === 1) {
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-        touchStartTX = translateX;
-        touchStartTY = translateY;
-        touchActive = true;
-        touchMoved = false;
-        return;
-      }
-    }
-
-    if (touchActive && touchMoved && scale <= 1) {
-      const t = e.changedTouches[0];
-      if (t) {
-        const dx = t.clientX - touchStartX;
-        if (dx < -50) goNext();
-        else if (dx > 50) goPrev();
-      }
-    }
-
-    if (e.touches.length === 0) {
-      endGesture();
-      touchActive = false;
-      touchMoved = false;
+      const el = e.currentTarget as HTMLElement;
+      const rect = el.getBoundingClientRect();
+      pz.zoom(3, {
+        animate: true,
+        focal: { x: e.clientX - rect.left, y: e.clientY - rect.top },
+      });
+      scale = 3;
     }
   }
 
@@ -416,14 +201,7 @@
       onclose();
     } else if (e.key === "ArrowRight") goNext();
     else if (e.key === "ArrowLeft") goPrev();
-    else if (e.key === "+" || e.key === "=")
-      scale = Math.min(MAX_SCALE, scale * 1.2);
-    else if (e.key === "-") scale = Math.max(MIN_SCALE, scale / 1.2);
   }
-
-  $effect(() => {
-    resetTransform();
-  });
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -432,15 +210,9 @@
 <div
   class="fixed inset-0 z-50 bg-black/95 flex flex-col"
   style="touch-action: none;"
-  onwheel={handleWheel}
-  onmousedown={handleMouseDown}
-  onmousemove={handleMouseMove}
-  onmouseup={handleMouseUp}
-  onmouseleave={handleMouseUp}
-  ontouchstart={(e) => handleTouchStart(e)}
-  ontouchmove={(e) => handleTouchMove(e)}
-  ontouchend={(e) => handleTouchEnd(e)}
-  ontouchcancel={(e) => handleTouchEnd(e)}
+  onpointerdown={handlePtrDown}
+  onpointermove={handlePtrMove}
+  onpointerup={handlePtrUp}
   role="dialog"
 >
   <!-- Toolbar -->
@@ -455,14 +227,9 @@
           >{currentIndex + 1}/{images.length}</span
         >
         <button
-          onclick={resetTransform}
+          onclick={resetZoom}
           class="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-zinc-800"
           >适应</button
-        >
-        <button
-          onclick={() => (scale = 1)}
-          class="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-zinc-800 hidden md:block"
-          >1:1</button
         >
       {:else}
         <span class="text-xs text-zinc-500"
@@ -601,28 +368,22 @@
           </button>
         {/if}
 
-        <div bind:this={wrapperEl} style="transform-origin: 0 0;">
-          <img
-            bind:this={imageEl}
-            src={getImageUrl(
-              currentImage.relativePath,
-              currentImage.modifiedAt,
-            )}
-            alt=""
-            onclick={(e) => toggleZoom(e)}
-            oncontextmenu={(e) => {
-              e.preventDefault();
-              oncontextmenu?.(e);
-            }}
-            class="max-w-full max-h-full select-none {showZoom && scale <= 1
-              ? 'object-contain cursor-zoom-in'
-              : showZoom
-                ? 'cursor-zoom-out'
-                : 'object-contain'}"
-            style="touch-action: manipulation; will-change: transform; transform-origin: 0 0;"
-            draggable="false"
-          />
-        </div>
+        <img
+          bind:this={imageEl}
+          src={getImageUrl(currentImage.relativePath, currentImage.modifiedAt)}
+          alt=""
+          onclick={(e) => toggleZoom(e)}
+          oncontextmenu={(e) => {
+            e.preventDefault();
+            oncontextmenu?.(e);
+          }}
+          class="max-w-full max-h-full select-none {showZoom && scale <= 1
+            ? 'object-contain cursor-zoom-in'
+            : showZoom
+              ? 'cursor-zoom-out'
+              : 'object-contain'}"
+          draggable="false"
+        />
       {/if}
     </div>
 
@@ -701,7 +462,7 @@
       {#each images as img, i}
         <button
           onclick={() => {
-            resetTransform();
+            resetZoom();
             onnavigate?.(i);
           }}
           class="shrink-0 w-12 h-12 rounded {i === currentIndex
