@@ -20,13 +20,6 @@
           store.setViewMode("library");
         }
         break;
-      case "e":
-      case "E":
-        if (!ctrl) {
-          e.preventDefault();
-          store.setViewMode("inspect");
-        }
-        break;
       case "c":
       case "C":
         if (!ctrl) {
@@ -100,13 +93,13 @@
         store.deselectAll();
         break;
       case "ArrowLeft":
-        if (!ctrl && store.viewMode !== "inspect") {
+        if (!ctrl && store.viewMode !== "compare") {
           e.preventDefault();
           navigateImage(-1);
         }
         break;
       case "ArrowRight":
-        if (!ctrl && store.viewMode !== "inspect") {
+        if (!ctrl && store.viewMode !== "compare") {
           e.preventDefault();
           navigateImage(1);
         }
