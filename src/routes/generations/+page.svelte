@@ -639,7 +639,7 @@
     images={lightboxImages}
     currentIndex={lightboxIndex}
     contextMenuOpen={contextMenuVisible}
-    showMobileInfo={true}
+    showInfo={true}
     showActions={true}
     onclose={() => (lightboxOpen = false)}
     onnavigate={handleLightboxNavigate}

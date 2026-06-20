@@ -1,6 +1,7 @@
 <script lang="ts">
   import ImageInfo from "./ImageInfo.svelte";
   import MobileImageSheet from "./MobileImageSheet.svelte";
+  import { isMobile } from "$lib/utils/device";
 
   let {
     images = [],
@@ -543,9 +544,9 @@
     </div>
 
     <!-- Desktop: full sidebar -->
-    {#if showInfo && currentImage}
+    {#if showInfo && currentImage && !isMobile}
       <div
-        class="hidden md:block w-80 shrink-0 border-l border-zinc-800 bg-zinc-900/80 overflow-y-auto p-4"
+        class="w-80 shrink-0 border-l border-zinc-800 bg-zinc-900/80 overflow-y-auto p-4"
       >
         <div class="text-xs text-zinc-500 mb-3">图片信息</div>
         <ImageInfo
@@ -570,7 +571,7 @@
   </div>
 
   <!-- Mobile: unified image info sheet -->
-  {#if showInfo && currentImage}
+  {#if showInfo && currentImage && isMobile}
     <MobileImageSheet
       filename={currentImage.filename || ""}
       fileSize={currentImage.fileSize ?? null}
@@ -597,11 +598,9 @@
     />
   {/if}
 
-  <!-- Filmstrip (hidden on mobile) -->
-  {#if showFilmstrip && images.length > 1}
-    <div
-      class="h-16 bg-black/50 hidden md:flex items-center gap-1 px-4 overflow-x-auto"
-    >
+  <!-- Filmstrip (desktop only) -->
+  {#if showFilmstrip && images.length > 1 && !isMobile}
+    <div class="h-16 bg-black/50 flex items-center gap-1 px-4 overflow-x-auto">
       {#each images as img, i}
         <button
           onclick={() => {
