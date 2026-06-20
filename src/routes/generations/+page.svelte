@@ -4,7 +4,6 @@
   import { galleryAPI } from "$lib/services/gallery-api";
   import { createSSEClient } from "$lib/services/sse-client";
   import LibraryView from "$lib/components/gallery/LibraryView.svelte";
-  import InspectView from "$lib/components/gallery/InspectView.svelte";
   import CompareView from "$lib/components/gallery/CompareView.svelte";
   import KeyboardShortcuts from "$lib/components/gallery/KeyboardShortcuts.svelte";
   import BatchActionsBar from "$lib/components/gallery/BatchActionsBar.svelte";
@@ -35,6 +34,8 @@
   }
 
   // Store setup
+  const isTouchDevice =
+    typeof window !== "undefined" && "ontouchstart" in window;
   const store = createGalleryStore({
     query: (filters, sort, pagination) =>
       galleryAPI.query(filters, sort, pagination),
@@ -142,14 +143,9 @@
 
   // Long-press handler → opens Lightbox for single image, action sheet for multi-select
   function handleLongPress(path: string) {
-    const image = store.images.find((img) => img.relativePath === path);
-    if (!image) return;
     if (store.selectedPaths.size > 1 && store.selectedPaths.has(path)) {
       mobileSheetImage = null;
       mobileSheetVisible = true;
-    } else {
-      mobileSheetImage = null;
-      openLightboxForImage(image);
     }
   }
 
@@ -556,13 +552,18 @@
         onlongpress={handleLongPress}
         ondownload={handleDownload}
         onopencollections={() => (collectionDrawerMobileOpen = true)}
-      />
-    {:else if store.viewMode === "inspect"}
-      <InspectView
-        {store}
-        {allTags}
-        oncontextmenu={handleContextMenu}
-        ondownload={handleLightboxDownload}
+        onselect={(path) => {
+          if (isTouchDevice) {
+            const img = store.images.find((i) => i.relativePath === path);
+            if (img) openLightboxForImage(img);
+          }
+        }}
+        ondblclick={(path) => {
+          if (!isTouchDevice) {
+            const img = store.images.find((i) => i.relativePath === path);
+            if (img) openLightboxForImage(img);
+          }
+        }}
       />
     {:else if store.viewMode === "compare"}
       <CompareView {store} {allTags} />

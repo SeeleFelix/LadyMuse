@@ -21,6 +21,8 @@
     onlongpress,
     ondownload,
     onopencollections,
+    onselect,
+    ondblclick,
   }: {
     store: GalleryStore;
     oncontextmenu?: (path: string, e: MouseEvent) => void;
@@ -32,6 +34,8 @@
     onlongpress?: (path: string) => void;
     ondownload?: (path: string) => void;
     onopencollections?: () => void;
+    onselect?: (path: string) => void;
+    ondblclick?: (path: string) => void;
   } = $props();
 
   let filterPanelOpen = $state(false);
@@ -50,11 +54,12 @@
     const multi = e.shiftKey || e.ctrlKey || e.metaKey;
     const range = e.shiftKey;
     store.select(path, multi, range);
+    onselect?.(path);
   }
 
   function handleDblClick(path: string) {
     store.select(path, false, false);
-    store.setViewMode("inspect");
+    ondblclick?.(path);
   }
 
   function handleContextMenu(path: string, e: MouseEvent) {
