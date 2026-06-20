@@ -2,11 +2,8 @@
   import ImageInfo from "./ImageInfo.svelte";
   import MobileImageSheet from "./MobileImageSheet.svelte";
 
-  let isMobile = $state(false);
-
-  $effect(() => {
-    isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-  });
+  const isMobile = () => /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+  const isDesktop = () => !isMobile();
 
   let {
     images = [],
@@ -387,7 +384,7 @@
         <button
           onclick={() => (scale = 1)}
           class="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-zinc-800"
-          class:hidden={isMobile}>1:1</button
+          class:hidden={isMobile()}>1:1</button
         >
       {:else}
         <span class="text-xs text-zinc-500"
@@ -489,7 +486,7 @@
           <button
             onclick={goPrev}
             class="absolute left-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70"
-            class:hidden={isMobile}
+            class:hidden={isMobile()}
           >
             <svg
               class="w-6 h-6"
@@ -510,7 +507,7 @@
           <button
             onclick={goNext}
             class="absolute right-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70"
-            class:hidden={isMobile}
+            class:hidden={isMobile()}
           >
             <svg
               class="w-6 h-6"
@@ -551,7 +548,7 @@
     </div>
 
     <!-- Desktop: full sidebar -->
-    {#if showInfo && currentImage && !isMobile}
+    {#if showInfo && currentImage && isDesktop()}
       <div
         class="w-80 shrink-0 border-l border-zinc-800 bg-zinc-900/80 overflow-y-auto p-4"
       >
@@ -578,7 +575,7 @@
   </div>
 
   <!-- Mobile: unified image info sheet -->
-  {#if showInfo && currentImage && isMobile}
+  {#if showInfo && currentImage && isMobile()}
     <MobileImageSheet
       filename={currentImage.filename || ""}
       fileSize={currentImage.fileSize ?? null}
@@ -606,7 +603,7 @@
   {/if}
 
   <!-- Filmstrip (desktop only) -->
-  {#if showFilmstrip && images.length > 1 && !isMobile}
+  {#if showFilmstrip && images.length > 1 && isDesktop()}
     <div class="h-16 bg-black/50 flex items-center gap-1 px-4 overflow-x-auto">
       {#each images as img, i}
         <button
