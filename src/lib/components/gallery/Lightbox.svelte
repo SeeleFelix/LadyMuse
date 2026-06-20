@@ -381,8 +381,8 @@
         >
         <button
           onclick={() => (scale = 1)}
-          class="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-zinc-800 hidden md:block"
-          >1:1</button
+          class="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-zinc-800"
+          class:hidden={isMobile}>1:1</button
         >
       {:else}
         <span class="text-xs text-zinc-500"
@@ -483,7 +483,8 @@
         {#if currentIndex > 0}
           <button
             onclick={goPrev}
-            class="absolute left-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 hidden md:block"
+            class="absolute left-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70"
+            class:hidden={isMobile}
           >
             <svg
               class="w-6 h-6"
@@ -503,7 +504,8 @@
         {#if currentIndex < images.length - 1}
           <button
             onclick={goNext}
-            class="absolute right-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 hidden md:block"
+            class="absolute right-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70"
+            class:hidden={isMobile}
           >
             <svg
               class="w-6 h-6"
