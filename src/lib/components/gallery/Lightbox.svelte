@@ -1,7 +1,7 @@
 <script lang="ts">
   import ImageInfo from "./ImageInfo.svelte";
   import MobileImageSheet from "./MobileImageSheet.svelte";
-  import { isMobile } from "$lib/utils/device";
+  import { isMobile } from "$lib/utils/is-mobile.svelte";
 
   let {
     images = [],
