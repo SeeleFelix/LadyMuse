@@ -563,7 +563,14 @@
           seed={currentImage.seed ?? null}
           positivePrompt={currentImage.positivePrompt ?? null}
           negativePrompt={currentImage.negativePrompt ?? null}
-          readonly={true}
+          readonly={!showActions}
+          showDelete={!!ondelete}
+          {onrate}
+          {oncolor}
+          {onflag}
+          ondownload={ondownload ? () => handleDownload() : undefined}
+          {ondelete}
+          oncopylink={showCopyLink ? () => handleCopyLink() : undefined}
         />
       </div>
     {/if}
