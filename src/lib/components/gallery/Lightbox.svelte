@@ -11,7 +11,6 @@
     showCopyLink = true,
     showFilmstrip = true,
     showInfo = false,
-    showMobileInfo = false,
     showActions = false,
     imageUrlBase = "/api/comfyui/images",
     onclose,
@@ -49,7 +48,6 @@
     showCopyLink?: boolean;
     showFilmstrip?: boolean;
     showInfo?: boolean;
-    showMobileInfo?: boolean;
     showActions?: boolean;
     imageUrlBase?: string;
     onclose: () => void;
@@ -572,7 +570,7 @@
   </div>
 
   <!-- Mobile: unified image info sheet -->
-  {#if (showMobileInfo || showInfo) && currentImage}
+  {#if showInfo && currentImage}
     <MobileImageSheet
       filename={currentImage.filename || ""}
       fileSize={currentImage.fileSize ?? null}
@@ -621,18 +619,6 @@
             loading="lazy"
           />
         </button>
-      {/each}
-    </div>
-    <!-- Mobile page dots -->
-    <div
-      class="flex md:hidden justify-center items-center gap-1.5 py-2 bg-black/50"
-    >
-      {#each images as _, i}
-        <div
-          class="w-1.5 h-1.5 rounded-full {i === currentIndex
-            ? 'bg-violet-400'
-            : 'bg-zinc-600'}"
-        ></div>
       {/each}
     </div>
   {/if}
