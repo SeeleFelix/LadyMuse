@@ -56,15 +56,10 @@
   }
 </script>
 
-<!-- DEBUG -->
-<div
-  class="md:hidden fixed bottom-0 left-0 z-[999] bg-red-500 text-white text-xs px-2 py-1"
->
-  DEBUG: showInfo={true}, filename={filename}
-</div>
-<!-- Collapsed bar (mobile only, fixed to bottom) -->
+<!-- Collapsed bar — fixed at viewport bottom, full width, safe-area aware -->
 <button
-  class="md:hidden fixed inset-x-0 bottom-8 z-[60] flex items-center justify-between w-full px-4 py-2.5 bg-zinc-900/90 backdrop-blur border-t border-zinc-700/50"
+  class="md:hidden fixed inset-x-0 bottom-0 z-[60] flex items-center justify-between px-4 py-2.5 bg-zinc-900/90 backdrop-blur border-t border-zinc-700/50"
+  style="padding-bottom: calc(0.625rem + env(safe-area-inset-bottom, 0px));"
   onclick={toggleExpanded}
 >
   <div class="flex items-center gap-2.5 min-w-0">
@@ -79,7 +74,7 @@
     {/if}
   </div>
   <svg
-    class="w-4 h-4 text-zinc-500 shrink-0 transition-transform {expanded
+    class="w-4 h-4 text-zinc-500 shrink-0 transition-transform duration-200 {expanded
       ? 'rotate-180'
       : ''}"
     fill="none"
@@ -95,25 +90,35 @@
   </svg>
 </button>
 
-<!-- Expanded overlay (mobile only) -->
+<!-- Expanded overlay -->
 {#if expanded}
+  <!-- Backdrop -->
   <button
-    class="md:hidden fixed inset-0 z-[65] bg-black/60"
+    class="md:hidden fixed inset-0 z-[65] bg-black/60 animate-in fade-in duration-200"
     onclick={toggleExpanded}
     aria-label="关闭详情"
   ></button>
 
+  <!-- Panel: fixed at viewport bottom, max 70vh, safe-area aware -->
   <div
-    class="md:hidden fixed inset-x-0 bottom-0 z-[70] bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-700/50 rounded-t-2xl shadow-2xl max-h-[60vh] flex flex-col"
+    class="md:hidden fixed inset-x-0 bottom-0 z-[70] bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-700/50 rounded-t-2xl shadow-2xl max-h-[70vh] flex flex-col"
+    style="padding-bottom: env(safe-area-inset-bottom, 0px);"
   >
+    <!-- Drag handle (visual only, no drag behavior) -->
+    <div class="flex justify-center pt-3 pb-1 shrink-0">
+      <div class="w-8 h-1 rounded-full bg-zinc-500/60"></div>
+    </div>
+
     <!-- Header -->
     <div
-      class="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 shrink-0"
+      class="flex items-center justify-between px-4 py-2 border-b border-zinc-800 shrink-0"
     >
-      <span class="text-sm font-medium text-zinc-300">{filename}</span>
+      <span class="text-sm font-medium text-zinc-300 truncate pr-4"
+        >{filename}</span
+      >
       <button
         onclick={toggleExpanded}
-        class="text-zinc-500 hover:text-zinc-300 p-1"
+        class="text-zinc-500 hover:text-zinc-300 p-1 shrink-0"
       >
         <svg
           class="w-5 h-5"
@@ -132,7 +137,7 @@
     </div>
 
     <!-- Scrollable content -->
-    <div class="overflow-y-auto px-4 py-3 flex-1">
+    <div class="overflow-y-auto px-4 py-3 flex-1 overscroll-contain">
       <ImageInfo
         {filename}
         {fileSize}
@@ -151,7 +156,7 @@
         {negativePrompt}
       />
 
-      <!-- Action buttons -->
+      <!-- Action buttons (gallery only) -->
       {#if showActions}
         <div class="mt-4 pt-4 border-t border-zinc-800 space-y-1">
           <!-- Rating -->
@@ -172,7 +177,7 @@
           <!-- Color -->
           <div class="flex items-center gap-3 px-1 py-2">
             <span class="text-zinc-500 text-xs w-8 shrink-0">颜色</span>
-            <div class="flex gap-2">
+            <div class="flex gap-2 flex-wrap">
               {#each [["red", "bg-red-500"], ["yellow", "bg-yellow-500"], ["green", "bg-green-500"], ["blue", "bg-blue-500"], ["purple", "bg-purple-500"]] as [key, cls]}
                 <button
                   onclick={() => oncolor?.(key)}
@@ -185,7 +190,7 @@
           <!-- Flag -->
           <div class="flex items-center gap-3 px-1 py-2">
             <span class="text-zinc-500 text-xs w-8 shrink-0">标记</span>
-            <div class="flex gap-2">
+            <div class="flex gap-2 flex-wrap">
               <button
                 onclick={() => onflag?.("pick")}
                 class="px-3 py-1 rounded text-xs border border-zinc-700 text-zinc-400 hover:bg-green-500/20 hover:text-green-400 hover:border-green-500/30 transition-colors"
@@ -202,7 +207,7 @@
           <!-- Utility actions -->
           <div class="flex items-center gap-3 px-1 py-2">
             <span class="text-zinc-500 text-xs w-8 shrink-0">操作</span>
-            <div class="flex gap-2">
+            <div class="flex flex-wrap gap-2">
               {#if oncopylink}
                 <button
                   onclick={() => oncopylink()}
