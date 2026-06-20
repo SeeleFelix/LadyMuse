@@ -166,7 +166,7 @@
     );
     const newTX = newScale <= 1 ? 0 : translateX;
     const newTY = newScale <= 1 ? 0 : translateY;
-    setTransform(newScale, newTX, newTY);
+    applyGestureTransform(newScale, newTX, newTY);
     scale = newScale;
     translateX = newTX;
     translateY = newTY;
