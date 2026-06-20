@@ -56,9 +56,9 @@
   }
 </script>
 
-<!-- Collapsed bar (mobile only) -->
+<!-- Collapsed bar (mobile only, fixed to bottom) -->
 <button
-  class="md:hidden flex items-center justify-between w-full px-4 py-2.5 bg-zinc-900/90 backdrop-blur border-t border-zinc-700/50"
+  class="md:hidden fixed inset-x-0 bottom-0 z-[60] flex items-center justify-between w-full px-4 py-2.5 bg-zinc-900/90 backdrop-blur border-t border-zinc-700/50"
   onclick={toggleExpanded}
 >
   <div class="flex items-center gap-2.5 min-w-0">
