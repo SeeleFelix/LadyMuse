@@ -187,6 +187,7 @@
       showCopyLink={false}
       showFilmstrip={false}
       showInfo={true}
+      showActions={false}
       imageUrlBase="/api/share/images"
       onclose={closeLightbox}
       onnavigate={handleLightboxNavigate}
