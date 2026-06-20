@@ -98,16 +98,20 @@
     imageEl.style.transition = "none";
   }
 
-  function endGesture() {
+  function syncFromDOM() {
     if (!wrapperEl || !imageEl) return;
-    wrapperEl.style.transition = "transform 0.2s ease";
-    imageEl.style.transition = "transform 0.2s ease";
-    // sync $state from DOM for toolbar display
     const wm = new DOMMatrixReadOnly(getComputedStyle(wrapperEl).transform);
     const im = new DOMMatrixReadOnly(getComputedStyle(imageEl).transform);
     scale = Math.hypot(im.a, im.b);
     translateX = wm.e;
     translateY = wm.f;
+  }
+
+  function endGesture() {
+    if (!wrapperEl || !imageEl) return;
+    wrapperEl.style.transition = "transform 0.2s ease";
+    imageEl.style.transition = "transform 0.2s ease";
+    syncFromDOM();
   }
 
   function scheduleGestureTransform(s: number, tx: number, ty: number) {
@@ -234,6 +238,7 @@
 
     if (touches.length === 2) {
       // Pinch start — cancel any active single-finger tracking
+      syncFromDOM(); // sync stale $state from any active pan gesture
       touchIsPinch = true;
       touchActive = false;
       e.preventDefault();
