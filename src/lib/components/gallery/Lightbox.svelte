@@ -86,6 +86,30 @@
   // Copy feedback
   let copied = $state(false);
 
+  // rAF throttle for smooth touch/mouse pan and zoom
+  let rafId = 0;
+  let pendingScale = 1;
+  let pendingTX = 0;
+  let pendingTY = 0;
+  let hasPendingTransform = false;
+
+  function applyPendingTransform() {
+    scale = pendingScale;
+    translateX = pendingTX;
+    translateY = pendingTY;
+    hasPendingTransform = false;
+  }
+
+  function scheduleTransformUpdate(s: number, tx: number, ty: number) {
+    pendingScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
+    pendingTX = pendingScale <= 1 ? 0 : tx;
+    pendingTY = pendingScale <= 1 ? 0 : ty;
+    if (!hasPendingTransform) {
+      hasPendingTransform = true;
+      rafId = requestAnimationFrame(applyPendingTransform);
+    }
+  }
+
   const MIN_SCALE = 0.1;
   const MAX_SCALE = 10;
 
@@ -241,13 +265,11 @@
       );
       const scaleRatio = newScale / touchStartScale;
 
-      translateX = mx * (1 - scaleRatio) + touchStartTX * scaleRatio;
-      translateY = my * (1 - scaleRatio) + touchStartTY * scaleRatio;
-      scale = newScale;
-      if (scale <= 1) {
-        translateX = 0;
-        translateY = 0;
-      }
+      scheduleTransformUpdate(
+        newScale,
+        mx * (1 - scaleRatio) + touchStartTX * scaleRatio,
+        my * (1 - scaleRatio) + touchStartTY * scaleRatio,
+      );
       return;
     }
 
@@ -261,8 +283,7 @@
 
       if (scale > 1) {
         e.preventDefault();
-        translateX = touchStartTX + dx;
-        translateY = touchStartTY + dy;
+        scheduleTransformUpdate(scale, touchStartTX + dx, touchStartTY + dy);
       }
     }
   }
@@ -536,7 +557,7 @@
           style="transform: scale({scale}) translate({translateX /
             scale}px, {translateY / scale}px); transition: {isDragging
             ? 'none'
-            : 'transform 0.2s ease'}; touch-action: manipulation;"
+            : 'transform 0.2s ease'}; touch-action: manipulation; will-change: transform;"
           draggable="false"
         />
       {/if}
