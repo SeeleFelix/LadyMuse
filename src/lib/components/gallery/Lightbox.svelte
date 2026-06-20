@@ -321,9 +321,6 @@
   <div class="flex-1 flex overflow-hidden">
     <div
       class="flex-1 flex items-center justify-center overflow-hidden relative"
-      onpointerdown={handlePtrDown}
-      onpointermove={handlePtrMove}
-      onpointerup={handlePtrUp}
     >
       {#if currentImage}
         <!-- Navigation arrows (hidden on mobile, replaced by swipe) -->
@@ -372,6 +369,9 @@
           bind:this={imageEl}
           src={getImageUrl(currentImage.relativePath, currentImage.modifiedAt)}
           alt=""
+          onpointerdown={handlePtrDown}
+          onpointermove={handlePtrMove}
+          onpointerup={handlePtrUp}
           onclick={(e) => toggleZoom(e)}
           oncontextmenu={(e) => {
             e.preventDefault();
