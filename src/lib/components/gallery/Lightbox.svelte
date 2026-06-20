@@ -191,7 +191,6 @@
     }
 
     if (touches.length === 1 && !touchIsPinch) {
-      e.preventDefault(); // suppress synthetic click + browser scroll
       touchStartX = touches[0].clientX;
       touchStartY = touches[0].clientY;
       touchStartScale = scale;
