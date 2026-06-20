@@ -47,7 +47,7 @@ export interface TrashListItem {
   deletedAt: string;
 }
 
-export type ViewMode = "library" | "inspect" | "compare";
+export type ViewMode = "library" | "compare";
 
 export type SortField =
   | "created_at"
