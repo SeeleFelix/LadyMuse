@@ -100,7 +100,7 @@
   let currentImage = $derived(images[currentIndex]);
 
   function resetZoom() {
-    pz?.reset();
+    pz?.reset({ animate: false });
     scale = 1;
     didDrag = false;
   }
@@ -153,7 +153,7 @@
     }
     const s = pz.getScale();
     if (s > 1) {
-      pz.reset();
+      pz.reset({ animate: false });
       scale = 1;
     } else {
       const el = e.currentTarget as HTMLElement;
