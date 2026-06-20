@@ -596,7 +596,7 @@
             : showZoom
               ? 'cursor-zoom-out'
               : 'object-contain'}"
-          style="touch-action: manipulation; will-change: transform;"
+          style="touch-action: manipulation; will-change: transform; transform-origin: 0 0;"
           draggable="false"
         />
       {/if}
