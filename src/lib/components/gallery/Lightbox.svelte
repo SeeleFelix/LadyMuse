@@ -86,27 +86,43 @@
   // Copy feedback
   let copied = $state(false);
 
-  // rAF throttle for smooth touch/mouse pan and zoom
-  let rafId = 0;
-  let pendingScale = 1;
-  let pendingTX = 0;
-  let pendingTY = 0;
-  let hasPendingTransform = false;
+  // Direct DOM transform during gesture — bypasses Svelte reactivity for smooth touch
+  let imageEl = $state<HTMLImageElement>();
+  let gestureActive = false;
+  let rafScheduled = false;
 
-  function applyPendingTransform() {
-    scale = pendingScale;
-    translateX = pendingTX;
-    translateY = pendingTY;
-    hasPendingTransform = false;
+  function setTransform(sx: number, px: number, py: number) {
+    if (!imageEl) return;
+    imageEl.style.transform = `scale(${sx}) translate(${px / sx}px, ${py / sx}px)`;
+    imageEl.style.transition = "none";
   }
 
-  function scheduleTransformUpdate(s: number, tx: number, ty: number) {
-    pendingScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
-    pendingTX = pendingScale <= 1 ? 0 : tx;
-    pendingTY = pendingScale <= 1 ? 0 : ty;
-    if (!hasPendingTransform) {
-      hasPendingTransform = true;
-      rafId = requestAnimationFrame(applyPendingTransform);
+  function endGesture() {
+    gestureActive = false;
+    if (!imageEl) return;
+    imageEl.style.transition = "transform 0.2s ease";
+    const m = new DOMMatrixReadOnly(getComputedStyle(imageEl).transform);
+    scale = Math.hypot(m.a, m.b);
+    translateX = m.e;
+    translateY = m.f;
+  }
+
+  function rAFTransform(s: number, px: number, py: number) {
+    rafScheduled = false;
+    if (gestureActive) {
+      setTransform(Math.min(MAX_SCALE, Math.max(MIN_SCALE, s)), px, py);
+    }
+  }
+
+  function scheduleGestureTransform(s: number, tx: number, ty: number) {
+    gestureActive = true;
+    const sx = Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
+    const px = sx <= 1 ? 0 : tx;
+    const py = sx <= 1 ? 0 : ty;
+    setTransform(sx, px, py);
+    if (!rafScheduled) {
+      rafScheduled = true;
+      requestAnimationFrame(() => rAFTransform(s, tx, ty));
     }
   }
 
@@ -116,6 +132,10 @@
   let currentImage = $derived(images[currentIndex]);
 
   function resetTransform() {
+    if (imageEl) {
+      imageEl.style.transform = "";
+      imageEl.style.transition = "transform 0.2s ease";
+    }
     scale = 1;
     translateX = 0;
     translateY = 0;
@@ -175,6 +195,7 @@
 
   function handleMouseUp() {
     isDragging = false;
+    endGesture();
   }
 
   function toggleZoom(e: MouseEvent) {
@@ -187,7 +208,13 @@
     if (scale > 1) {
       resetTransform();
     } else {
+      if (imageEl) {
+        imageEl.style.transform = "scale(3) translate(0px, 0px)";
+        imageEl.style.transition = "transform 0.2s ease";
+      }
       scale = 3;
+      translateX = 0;
+      translateY = 0;
     }
   }
 
@@ -265,7 +292,7 @@
       );
       const scaleRatio = newScale / touchStartScale;
 
-      scheduleTransformUpdate(
+      scheduleGestureTransform(
         newScale,
         mx * (1 - scaleRatio) + touchStartTX * scaleRatio,
         my * (1 - scaleRatio) + touchStartTY * scaleRatio,
@@ -283,7 +310,7 @@
 
       if (scale > 1) {
         e.preventDefault();
-        scheduleTransformUpdate(scale, touchStartTX + dx, touchStartTY + dy);
+        scheduleGestureTransform(scale, touchStartTX + dx, touchStartTY + dy);
       }
     }
   }
@@ -292,6 +319,7 @@
     if (!showZoom) return;
 
     if (touchIsPinch && e.touches.length < 2) {
+      endGesture();
       // Pinch ended — transition to single-finger pan if one finger remains
       touchIsPinch = false;
       pinchStartDist = 0;
@@ -316,6 +344,7 @@
     }
 
     if (e.touches.length === 0) {
+      endGesture();
       touchActive = false;
       touchMoved = false;
     }
@@ -542,6 +571,7 @@
         {/if}
 
         <img
+          bind:this={imageEl}
           src={getImageUrl(currentImage.relativePath, currentImage.modifiedAt)}
           alt=""
           onclick={(e) => toggleZoom(e)}
@@ -554,10 +584,7 @@
             : showZoom
               ? 'cursor-zoom-out'
               : 'object-contain'}"
-          style="transform: scale({scale}) translate({translateX /
-            scale}px, {translateY / scale}px); transition: {isDragging
-            ? 'none'
-            : 'transform 0.2s ease'}; touch-action: manipulation; will-change: transform;"
+          style="touch-action: manipulation; will-change: transform;"
           draggable="false"
         />
       {/if}
