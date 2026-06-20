@@ -1,6 +1,5 @@
 <script lang="ts">
-  import ImageInfo from "./ImageInfo.svelte";
-  import MobileImageSheet from "./MobileImageSheet.svelte";
+  import ImageDetail from "./ImageDetail.svelte";
 
   let {
     images = [],
@@ -542,13 +541,10 @@
       {/if}
     </div>
 
-    <!-- Desktop: full sidebar -->
+    <!-- Desktop: ImageDetail sidebar -->
     {#if showInfo && currentImage}
-      <div
-        class="hidden md:block w-80 shrink-0 border-l border-zinc-800 bg-zinc-900/80 overflow-y-auto p-4"
-      >
-        <div class="text-xs text-zinc-500 mb-3">图片信息</div>
-        <ImageInfo
+      <div class="hidden md:block">
+        <ImageDetail
           filename={currentImage.filename || ""}
           fileSize={currentImage.fileSize ?? null}
           width={currentImage.width ?? null}
@@ -564,37 +560,41 @@
           seed={currentImage.seed ?? null}
           positivePrompt={currentImage.positivePrompt ?? null}
           negativePrompt={currentImage.negativePrompt ?? null}
+          readonly={true}
         />
       </div>
     {/if}
   </div>
 
-  <!-- Mobile: unified image info sheet -->
+  <!-- Mobile: ImageDetail -->
   {#if showInfo && currentImage}
-    <MobileImageSheet
-      filename={currentImage.filename || ""}
-      fileSize={currentImage.fileSize ?? null}
-      width={currentImage.width ?? null}
-      height={currentImage.height ?? null}
-      fileFormat={currentImage.fileFormat ?? null}
-      rating={currentImage.rating ?? null}
-      extractedModels={currentImage.extractedModels ?? []}
-      extractedLoras={currentImage.extractedLoras ?? []}
-      extractedSamplers={currentImage.extractedSamplers ?? []}
-      extractedSchedulers={currentImage.extractedSchedulers ?? []}
-      steps={currentImage.steps ?? null}
-      cfgScale={currentImage.cfgScale ?? null}
-      seed={currentImage.seed ?? null}
-      positivePrompt={currentImage.positivePrompt ?? null}
-      negativePrompt={currentImage.negativePrompt ?? null}
-      {showActions}
-      {onrate}
-      {oncolor}
-      {onflag}
-      ondownload={ondownload ? () => handleDownload() : undefined}
-      {ondelete}
-      oncopylink={showCopyLink ? () => handleCopyLink() : undefined}
-    />
+    <div class="md:hidden">
+      <ImageDetail
+        filename={currentImage.filename || ""}
+        fileSize={currentImage.fileSize ?? null}
+        width={currentImage.width ?? null}
+        height={currentImage.height ?? null}
+        fileFormat={currentImage.fileFormat ?? null}
+        rating={currentImage.rating ?? null}
+        extractedModels={currentImage.extractedModels ?? []}
+        extractedLoras={currentImage.extractedLoras ?? []}
+        extractedSamplers={currentImage.extractedSamplers ?? []}
+        extractedSchedulers={currentImage.extractedSchedulers ?? []}
+        steps={currentImage.steps ?? null}
+        cfgScale={currentImage.cfgScale ?? null}
+        seed={currentImage.seed ?? null}
+        positivePrompt={currentImage.positivePrompt ?? null}
+        negativePrompt={currentImage.negativePrompt ?? null}
+        readonly={!showActions}
+        showDelete={!!ondelete}
+        {onrate}
+        {oncolor}
+        {onflag}
+        ondownload={ondownload ? () => handleDownload() : undefined}
+        {ondelete}
+        oncopylink={showCopyLink ? () => handleCopyLink() : undefined}
+      />
+    </div>
   {/if}
 
   <!-- Filmstrip (desktop only) -->
