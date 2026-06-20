@@ -126,9 +126,6 @@
 
   function handlePtrDown(e: PointerEvent) {
     if (!showZoom) return;
-    // Only track on non-interactive targets (image, container bg)
-    const t = e.target as HTMLElement;
-    if (t.closest("button, [role=button], input, select, a")) return;
     pointerStartX = e.clientX;
     didDrag = false;
   }
@@ -213,9 +210,6 @@
 <div
   class="fixed inset-0 z-50 bg-black/95 flex flex-col"
   style="touch-action: none;"
-  onpointerdown={handlePtrDown}
-  onpointermove={handlePtrMove}
-  onpointerup={handlePtrUp}
   role="dialog"
 >
   <!-- Toolbar -->
@@ -327,6 +321,9 @@
   <div class="flex-1 flex overflow-hidden">
     <div
       class="flex-1 flex items-center justify-center overflow-hidden relative"
+      onpointerdown={handlePtrDown}
+      onpointermove={handlePtrMove}
+      onpointerup={handlePtrUp}
     >
       {#if currentImage}
         <!-- Navigation arrows (hidden on mobile, replaced by swipe) -->
