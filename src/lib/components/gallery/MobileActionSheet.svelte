@@ -12,6 +12,7 @@
   let touchStartY = $state(0);
   let translateY = $state(0);
   let dismissing = $state(false);
+  let openedAt = $state(0);
 
   function handleTouchStart(e: TouchEvent) {
     const touch = e.touches[0];
@@ -39,6 +40,7 @@
     if (visible) {
       translateY = 0;
       dismissing = false;
+      openedAt = Date.now();
     }
   });
 </script>
@@ -46,7 +48,10 @@
 {#if visible}
   <button
     class="fixed inset-0 z-50 bg-black/60"
-    onclick={onclose}
+    onclick={(e) => {
+      if (Date.now() - openedAt < 300) return;
+      onclose();
+    }}
     aria-label="关闭菜单"
   ></button>
 
