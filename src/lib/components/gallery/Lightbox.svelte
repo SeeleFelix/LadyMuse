@@ -1,7 +1,12 @@
 <script lang="ts">
   import ImageInfo from "./ImageInfo.svelte";
   import MobileImageSheet from "./MobileImageSheet.svelte";
-  const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+
+  let isMobile = $state(false);
+
+  $effect(() => {
+    isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+  });
 
   let {
     images = [],
@@ -363,11 +368,6 @@
   ontouchcancel={(e) => handleTouchEnd(e)}
   role="dialog"
 >
-  <div
-    style="position:fixed;top:0;left:0;z-index:999;background:yellow;color:black;font-size:16px;padding:5px;"
-  >
-    isMobile={String(isMobile)} nav={navigator.userAgent.substring(0, 50)}
-  </div>
   <!-- Toolbar -->
   <div class="flex items-center justify-between px-4 py-2 bg-black/50">
     <div class="text-sm text-zinc-300 truncate max-w-[200px] md:max-w-md">
@@ -551,9 +551,6 @@
     </div>
 
     <!-- Desktop: full sidebar -->
-    <div style="background:red;color:white;font-size:20px;padding:10px;">
-      DEBUG-SIDEBAR isMobile={isMobile} showInfo={showInfo} hasImage={!!currentImage}
-    </div>
     {#if showInfo && currentImage && !isMobile}
       <div
         class="w-80 shrink-0 border-l border-zinc-800 bg-zinc-900/80 overflow-y-auto p-4"
@@ -581,9 +578,6 @@
   </div>
 
   <!-- Mobile: unified image info sheet -->
-  <div style="background:blue;color:white;font-size:20px;padding:10px;">
-    DEBUG-SHEET isMobile={isMobile} showInfo={showInfo} hasImage={!!currentImage}
-  </div>
   {#if showInfo && currentImage && isMobile}
     <MobileImageSheet
       filename={currentImage.filename || ""}
@@ -612,9 +606,6 @@
   {/if}
 
   <!-- Filmstrip (desktop only) -->
-  <div style="background:green;color:white;font-size:20px;padding:10px;">
-    DEBUG-FILMSTRIP isMobile={isMobile} showFilmstrip={showFilmstrip} imgCount={images.length}
-  </div>
   {#if showFilmstrip && images.length > 1 && !isMobile}
     <div class="h-16 bg-black/50 flex items-center gap-1 px-4 overflow-x-auto">
       {#each images as img, i}
