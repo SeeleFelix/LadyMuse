@@ -86,29 +86,35 @@
   // Copy feedback
   let copied = $state(false);
 
-  // Direct DOM transform during gesture — bypasses Svelte reactivity for smooth touch
+  // Two-layer transform: wrapper(translate) + image(scale) — production standard
+  let wrapperEl = $state<HTMLDivElement>();
   let imageEl = $state<HTMLImageElement>();
 
-  function setTransform(sx: number, tx: number, ty: number) {
-    if (!imageEl) return;
-    imageEl.style.transform = `scale(${sx}) translate(${tx / sx}px, ${ty / sx}px)`;
+  function applyGestureTransform(sx: number, tx: number, ty: number) {
+    if (!wrapperEl || !imageEl) return;
+    wrapperEl.style.transform = `translate(${tx}px, ${ty}px)`;
+    wrapperEl.style.transition = "none";
+    imageEl.style.transform = `scale(${sx})`;
     imageEl.style.transition = "none";
   }
 
   function endGesture() {
-    if (!imageEl) return;
+    if (!wrapperEl || !imageEl) return;
+    wrapperEl.style.transition = "transform 0.2s ease";
     imageEl.style.transition = "transform 0.2s ease";
-    const m = new DOMMatrixReadOnly(getComputedStyle(imageEl).transform);
-    scale = Math.hypot(m.a, m.b);
-    translateX = m.e;
-    translateY = m.f;
+    // sync $state from DOM for toolbar display
+    const wm = new DOMMatrixReadOnly(getComputedStyle(wrapperEl).transform);
+    const im = new DOMMatrixReadOnly(getComputedStyle(imageEl).transform);
+    scale = Math.hypot(im.a, im.b);
+    translateX = wm.e;
+    translateY = wm.f;
   }
 
   function scheduleGestureTransform(s: number, tx: number, ty: number) {
     const sx = Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
     const px = sx <= 1 ? 0 : tx;
     const py = sx <= 1 ? 0 : ty;
-    setTransform(sx, px, py);
+    applyGestureTransform(sx, px, py);
   }
 
   const MIN_SCALE = 0.1;
@@ -117,6 +123,10 @@
   let currentImage = $derived(images[currentIndex]);
 
   function resetTransform() {
+    if (wrapperEl) {
+      wrapperEl.style.transform = "";
+      wrapperEl.style.transition = "transform 0.2s ease";
+    }
     if (imageEl) {
       imageEl.style.transform = "";
       imageEl.style.transition = "transform 0.2s ease";
@@ -197,15 +207,17 @@
     if (scale > 1) {
       resetTransform();
     } else {
-      // Zoom to click position
-      const rect = imageEl?.getBoundingClientRect();
+      // Zoom to click position — two-layer: wrapper translates, image scales
+      const rect = wrapperEl?.getBoundingClientRect();
       const cx = rect ? e.clientX - rect.left : 0;
       const cy = rect ? e.clientY - rect.top : 0;
       const newScale = 3;
       const tx = cx * (1 - newScale);
       const ty = cy * (1 - newScale);
-      if (imageEl) {
-        imageEl.style.transform = `scale(${newScale}) translate(${tx / newScale}px, ${ty / newScale}px)`;
+      if (wrapperEl && imageEl) {
+        wrapperEl.style.transform = `translate(${tx}px, ${ty}px)`;
+        wrapperEl.style.transition = "transform 0.2s ease";
+        imageEl.style.transform = `scale(${newScale})`;
         imageEl.style.transition = "transform 0.2s ease";
       }
       scale = newScale;
@@ -257,15 +269,17 @@
         if (scale > 1) {
           resetTransform();
         } else {
-          // Zoom to tap position
-          const rect = imageEl?.getBoundingClientRect();
+          // Zoom to tap position — two-layer
+          const rect = wrapperEl?.getBoundingClientRect();
           const cx = rect ? touches[0].clientX - rect.left : 0;
           const cy = rect ? touches[0].clientY - rect.top : 0;
           const newScale = 3;
           const tx = cx * (1 - newScale);
           const ty = cy * (1 - newScale);
-          if (imageEl) {
-            imageEl.style.transform = `scale(${newScale}) translate(${tx / newScale}px, ${ty / newScale}px)`;
+          if (wrapperEl && imageEl) {
+            wrapperEl.style.transform = `translate(${tx}px, ${ty}px)`;
+            wrapperEl.style.transition = "transform 0.2s ease";
+            imageEl.style.transform = `scale(${newScale})`;
             imageEl.style.transition = "transform 0.2s ease";
           }
           scale = newScale;
@@ -582,23 +596,28 @@
           </button>
         {/if}
 
-        <img
-          bind:this={imageEl}
-          src={getImageUrl(currentImage.relativePath, currentImage.modifiedAt)}
-          alt=""
-          onclick={(e) => toggleZoom(e)}
-          oncontextmenu={(e) => {
-            e.preventDefault();
-            oncontextmenu?.(e);
-          }}
-          class="max-w-full max-h-full select-none {showZoom && scale <= 1
-            ? 'object-contain cursor-zoom-in'
-            : showZoom
-              ? 'cursor-zoom-out'
-              : 'object-contain'}"
-          style="touch-action: manipulation; will-change: transform; transform-origin: 0 0;"
-          draggable="false"
-        />
+        <div bind:this={wrapperEl} style="transform-origin: 0 0;">
+          <img
+            bind:this={imageEl}
+            src={getImageUrl(
+              currentImage.relativePath,
+              currentImage.modifiedAt,
+            )}
+            alt=""
+            onclick={(e) => toggleZoom(e)}
+            oncontextmenu={(e) => {
+              e.preventDefault();
+              oncontextmenu?.(e);
+            }}
+            class="max-w-full max-h-full select-none {showZoom && scale <= 1
+              ? 'object-contain cursor-zoom-in'
+              : showZoom
+                ? 'cursor-zoom-out'
+                : 'object-contain'}"
+            style="touch-action: manipulation; will-change: transform; transform-origin: 0 0;"
+            draggable="false"
+          />
+        </div>
       {/if}
     </div>
 
