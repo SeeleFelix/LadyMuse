@@ -365,6 +365,11 @@
   ontouchcancel={(e) => handleTouchEnd(e)}
   role="dialog"
 >
+  <div
+    style="position:fixed;top:0;left:0;right:0;z-index:99999;background:red;font-size:20px;font-weight:bold;color:white;padding:10px;"
+  >
+    STATIC TEST
+  </div>
   <!-- Toolbar -->
   <div class="flex items-center justify-between px-4 py-2 bg-black/50">
     <div class="text-sm text-zinc-300 truncate max-w-[200px] md:max-w-md">
