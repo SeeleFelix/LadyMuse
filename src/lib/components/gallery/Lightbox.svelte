@@ -621,17 +621,19 @@
         </button>
       {/each}
     </div>
-    <!-- Mobile page dots -->
-    <div
-      class="flex md:hidden justify-center items-center gap-1.5 py-2 bg-black/50"
-    >
-      {#each images as _, i}
-        <div
-          class="w-1.5 h-1.5 rounded-full {i === currentIndex
-            ? 'bg-violet-400'
-            : 'bg-zinc-600'}"
-        ></div>
-      {/each}
-    </div>
+    <!-- Mobile page dots (hidden when info sheet is showing) -->
+    {#if !showInfo}
+      <div
+        class="flex md:hidden justify-center items-center gap-1.5 py-2 bg-black/50"
+      >
+        {#each images as _, i}
+          <div
+            class="w-1.5 h-1.5 rounded-full {i === currentIndex
+              ? 'bg-violet-400'
+              : 'bg-zinc-600'}"
+          ></div>
+        {/each}
+      </div>
+    {/if}
   {/if}
 </div>
