@@ -1,5 +1,6 @@
 <script lang="ts">
   import ImageInfo from "./ImageInfo.svelte";
+  import MobileImageSheet from "./MobileImageSheet.svelte";
 
   let {
     images = [],
@@ -10,10 +11,15 @@
     showCopyLink = true,
     showFilmstrip = true,
     showInfo = false,
+    showActions = false,
     imageUrlBase = "/api/comfyui/images",
     onclose,
     onnavigate,
     oncontextmenu,
+    onrate,
+    oncolor,
+    onflag,
+    ondelete,
     ondownload,
   }: {
     images: {
@@ -42,10 +48,15 @@
     showCopyLink?: boolean;
     showFilmstrip?: boolean;
     showInfo?: boolean;
+    showActions?: boolean;
     imageUrlBase?: string;
     onclose: () => void;
     onnavigate?: (index: number) => void;
     oncontextmenu?: (e: MouseEvent) => void;
+    onrate?: (rating: number) => void;
+    oncolor?: (color: string | null) => void;
+    onflag?: (flag: string | null) => void;
+    ondelete?: () => void;
     ondownload?: (imageUrl: string, filename: string) => void;
   } = $props();
 
@@ -73,53 +84,6 @@
 
   // Copy feedback
   let copied = $state(false);
-
-  // Mobile info sheet — single pixel-offset system
-  let sheetOpen = $state(false);
-  let sheetDragPx = $state(0);
-  let sheetDragging = $state(false);
-  let sheetStartY = $state(0);
-  let sheetStartPx = $state(0);
-
-  const SHEET_HANDLE_H = 48;
-
-  function sheetPanelH() {
-    return Math.round(window.innerHeight * 0.5);
-  }
-
-  function sheetClosedOffset() {
-    return sheetPanelH() - SHEET_HANDLE_H;
-  }
-
-  function sheetYpx(): number {
-    if (sheetDragging) {
-      return Math.max(0, Math.min(sheetClosedOffset(), sheetDragPx));
-    }
-    return sheetOpen ? 0 : sheetClosedOffset();
-  }
-
-  function toggleSheet() {
-    sheetOpen = !sheetOpen;
-  }
-
-  function handleSheetPointerDown(e: PointerEvent) {
-    sheetDragging = true;
-    sheetStartY = e.clientY;
-    sheetStartPx = sheetOpen ? 0 : sheetClosedOffset();
-    (e.target as HTMLElement)?.setPointerCapture?.(e.pointerId);
-  }
-
-  function handleSheetPointerMove(e: PointerEvent) {
-    if (!sheetDragging) return;
-    sheetDragPx = sheetStartPx + (e.clientY - sheetStartY);
-  }
-
-  function handleSheetPointerUp(_e: PointerEvent) {
-    sheetDragging = false;
-    const threshold = sheetClosedOffset() * 0.45;
-    sheetOpen = sheetDragPx < threshold;
-    sheetDragPx = 0;
-  }
 
   const MIN_SCALE = 0.1;
   const MAX_SCALE = 10;
@@ -605,72 +569,32 @@
     {/if}
   </div>
 
-  <!-- Mobile: draggable bottom sheet for image info -->
+  <!-- Mobile: unified image info sheet -->
   {#if showInfo && currentImage}
-    <div
-      class="md:hidden fixed inset-x-0 bottom-0 z-[60] bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-700/50 rounded-t-2xl shadow-2xl"
-      onpointerdown={(e) => e.stopPropagation()}
-      onpointermove={(e) => e.stopPropagation()}
-      onpointerup={(e) => e.stopPropagation()}
-      ontouchstart={(e) => e.stopPropagation()}
-      ontouchmove={(e) => e.stopPropagation()}
-      ontouchend={(e) => e.stopPropagation()}
-      style="height: 50vh; transform: translateY({sheetYpx()}px); transition: {sheetDragging
-        ? 'none'
-        : 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)'};"
-    >
-      <!-- Handle area (48px, always visible) -->
-      <div
-        class="flex flex-col items-center pt-3 pb-2 cursor-pointer select-none touch-none"
-        onclick={toggleSheet}
-        onpointerdown={handleSheetPointerDown}
-        onpointermove={handleSheetPointerMove}
-        onpointerup={handleSheetPointerUp}
-        role="button"
-        tabindex="0"
-      >
-        <div class="w-8 h-1 rounded-full bg-zinc-500/60 mb-2"></div>
-        <div class="flex items-center gap-2 text-xs">
-          <span class="text-zinc-400"
-            >{sheetOpen ? "下滑收起" : "图片信息"}</span
-          >
-          {#if (currentImage.rating ?? 0) > 0}
-            <span class="text-amber-400 text-xs">
-              {"★".repeat(currentImage.rating ?? 0)}
-            </span>
-          {/if}
-          {#if currentImage.width && currentImage.height}
-            <span class="text-zinc-500"
-              >{currentImage.width}×{currentImage.height}</span
-            >
-          {/if}
-        </div>
-      </div>
-
-      <!-- Sheet content (scrollable) -->
-      <div
-        class="overflow-y-auto px-4 pb-6"
-        style="height: calc(50vh - {SHEET_HANDLE_H}px); touch-action: pan-y;"
-      >
-        <ImageInfo
-          filename={currentImage.filename || ""}
-          fileSize={currentImage.fileSize ?? null}
-          width={currentImage.width ?? null}
-          height={currentImage.height ?? null}
-          fileFormat={currentImage.fileFormat ?? null}
-          rating={currentImage.rating ?? null}
-          extractedModels={currentImage.extractedModels ?? []}
-          extractedLoras={currentImage.extractedLoras ?? []}
-          extractedSamplers={currentImage.extractedSamplers ?? []}
-          extractedSchedulers={currentImage.extractedSchedulers ?? []}
-          steps={currentImage.steps ?? null}
-          cfgScale={currentImage.cfgScale ?? null}
-          seed={currentImage.seed ?? null}
-          positivePrompt={currentImage.positivePrompt ?? null}
-          negativePrompt={currentImage.negativePrompt ?? null}
-        />
-      </div>
-    </div>
+    <MobileImageSheet
+      filename={currentImage.filename || ""}
+      fileSize={currentImage.fileSize ?? null}
+      width={currentImage.width ?? null}
+      height={currentImage.height ?? null}
+      fileFormat={currentImage.fileFormat ?? null}
+      rating={currentImage.rating ?? null}
+      extractedModels={currentImage.extractedModels ?? []}
+      extractedLoras={currentImage.extractedLoras ?? []}
+      extractedSamplers={currentImage.extractedSamplers ?? []}
+      extractedSchedulers={currentImage.extractedSchedulers ?? []}
+      steps={currentImage.steps ?? null}
+      cfgScale={currentImage.cfgScale ?? null}
+      seed={currentImage.seed ?? null}
+      positivePrompt={currentImage.positivePrompt ?? null}
+      negativePrompt={currentImage.negativePrompt ?? null}
+      {showActions}
+      {onrate}
+      {oncolor}
+      {onflag}
+      ondownload={ondownload ? () => handleDownload() : undefined}
+      {ondelete}
+      oncopylink={showCopyLink ? () => handleCopyLink() : undefined}
+    />
   {/if}
 
   <!-- Filmstrip (hidden on mobile) -->
