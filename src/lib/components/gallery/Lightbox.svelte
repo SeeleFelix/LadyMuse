@@ -126,6 +126,9 @@
 
   function handlePtrDown(e: PointerEvent) {
     if (!showZoom) return;
+    // Only track on non-interactive targets (image, container bg)
+    const t = e.target as HTMLElement;
+    if (t.closest("button, [role=button], input, select, a")) return;
     pointerStartX = e.clientX;
     didDrag = false;
   }
