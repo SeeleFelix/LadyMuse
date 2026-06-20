@@ -136,16 +136,26 @@
   }
 
   function handlePtrUp(e: PointerEvent) {
-    if (!showZoom || !pz) return;
-    const s = pz.getScale();
-    if (didDrag && s <= 1) {
+    if (!showZoom) return;
+    if (pz && pz.getScale() <= 1 && didDrag) {
       const dx = e.clientX - pointerStartX;
       if (dx < -50) goNext();
       else if (dx > 50) goPrev();
-      // Prevent click from firing zoom toggle after swipe
-      e.preventDefault();
-    } else if (!didDrag && s <= 1) {
-      // Tap to zoom in — bypass click 300ms delay
+    }
+  }
+
+  function toggleZoom(e: MouseEvent) {
+    if (!showZoom || !pz) return;
+    if (e.detail === 0) return;
+    if (didDrag) {
+      didDrag = false;
+      return;
+    }
+    const s = pz.getScale();
+    if (s > 1) {
+      pz.reset();
+      scale = 1;
+    } else {
       const el = e.currentTarget as HTMLElement;
       const rect = el.getBoundingClientRect();
       pz.zoom(3, {
@@ -153,12 +163,6 @@
         focal: { x: e.clientX - rect.left, y: e.clientY - rect.top },
       });
       scale = 3;
-      e.preventDefault();
-    } else if (!didDrag && s > 1) {
-      // Tap to zoom out
-      pz.reset();
-      scale = 1;
-      e.preventDefault();
     }
   }
 
@@ -368,6 +372,7 @@
           onpointerdown={handlePtrDown}
           onpointermove={handlePtrMove}
           onpointerup={handlePtrUp}
+          onclick={(e) => toggleZoom(e)}
           oncontextmenu={(e) => {
             e.preventDefault();
             oncontextmenu?.(e);
@@ -377,6 +382,7 @@
             : showZoom
               ? 'cursor-zoom-out'
               : 'object-contain'}"
+          style="touch-action: manipulation;"
           draggable="false"
         />
       {/if}
