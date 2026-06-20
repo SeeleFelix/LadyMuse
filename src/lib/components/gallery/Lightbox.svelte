@@ -2,9 +2,6 @@
   import ImageInfo from "./ImageInfo.svelte";
   import MobileImageSheet from "./MobileImageSheet.svelte";
 
-  const isMobile = () => /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-  const isDesktop = () => !isMobile();
-
   let {
     images = [],
     currentIndex = 0,
@@ -365,11 +362,6 @@
   ontouchcancel={(e) => handleTouchEnd(e)}
   role="dialog"
 >
-  <div
-    style="position:fixed;top:0;left:0;right:0;z-index:99999;background:red;font-size:20px;font-weight:bold;color:white;padding:10px;"
-  >
-    STATIC TEST
-  </div>
   <!-- Toolbar -->
   <div class="flex items-center justify-between px-4 py-2 bg-black/50">
     <div class="text-sm text-zinc-300 truncate max-w-[200px] md:max-w-md">
@@ -388,8 +380,8 @@
         >
         <button
           onclick={() => (scale = 1)}
-          class="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-zinc-800"
-          class:hidden={isMobile()}>1:1</button
+          class="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-zinc-800 hidden md:block"
+          >1:1</button
         >
       {:else}
         <span class="text-xs text-zinc-500"
@@ -490,8 +482,7 @@
         {#if currentIndex > 0}
           <button
             onclick={goPrev}
-            class="absolute left-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70"
-            class:hidden={isMobile()}
+            class="absolute left-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 hidden md:block"
           >
             <svg
               class="w-6 h-6"
@@ -511,8 +502,7 @@
         {#if currentIndex < images.length - 1}
           <button
             onclick={goNext}
-            class="absolute right-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70"
-            class:hidden={isMobile()}
+            class="absolute right-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 hidden md:block"
           >
             <svg
               class="w-6 h-6"
@@ -553,9 +543,9 @@
     </div>
 
     <!-- Desktop: full sidebar -->
-    {#if showInfo && currentImage && isDesktop()}
+    {#if showInfo && currentImage}
       <div
-        class="w-80 shrink-0 border-l border-zinc-800 bg-zinc-900/80 overflow-y-auto p-4"
+        class="hidden md:block w-80 shrink-0 border-l border-zinc-800 bg-zinc-900/80 overflow-y-auto p-4"
       >
         <div class="text-xs text-zinc-500 mb-3">图片信息</div>
         <ImageInfo
@@ -580,7 +570,7 @@
   </div>
 
   <!-- Mobile: unified image info sheet -->
-  {#if showInfo && currentImage && isMobile()}
+  {#if showInfo && currentImage}
     <MobileImageSheet
       filename={currentImage.filename || ""}
       fileSize={currentImage.fileSize ?? null}
@@ -608,8 +598,10 @@
   {/if}
 
   <!-- Filmstrip (desktop only) -->
-  {#if showFilmstrip && images.length > 1 && isDesktop()}
-    <div class="h-16 bg-black/50 flex items-center gap-1 px-4 overflow-x-auto">
+  {#if showFilmstrip && images.length > 1}
+    <div
+      class="h-16 bg-black/50 hidden md:flex items-center gap-1 px-4 overflow-x-auto"
+    >
       {#each images as img, i}
         <button
           onclick={() => {
