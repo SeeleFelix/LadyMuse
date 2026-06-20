@@ -159,7 +159,7 @@
       const el = e.currentTarget as HTMLElement;
       const rect = el.getBoundingClientRect();
       pz.zoom(3, {
-        animate: true,
+        animate: false,
         focal: { x: e.clientX - rect.left, y: e.clientY - rect.top },
       });
       scale = 3;
