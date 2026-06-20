@@ -545,7 +545,7 @@
 
     <!-- Desktop: ImageDetail sidebar -->
     {#if showInfo && currentImage}
-      <div class="hidden md:block">
+      <div class="hidden md:block w-80 shrink-0 border-l border-zinc-800">
         <ImageDetail
           filename={currentImage.filename || ""}
           fileSize={currentImage.fileSize ?? null}
