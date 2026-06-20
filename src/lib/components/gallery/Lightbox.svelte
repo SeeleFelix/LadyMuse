@@ -70,10 +70,11 @@
   let didDrag = false;
   let pointerStartX = 0;
 
-  $effect(() => {
+  import { onMount } from "svelte";
+
+  onMount(() => {
     const el = imageEl;
     if (!el) return;
-    pz?.destroy();
     const instance = Panzoom(el, {
       maxScale: 10,
       minScale: 0.1,
@@ -84,17 +85,16 @@
     if (parent) parent.addEventListener("wheel", instance.zoomWithWheel);
     instance.reset();
     scale = 1;
-    return () => instance.destroy();
-  });
 
-  $effect(() => {
-    const instance = pz;
-    if (!instance) return;
     const timer = setInterval(() => {
       const s = instance.getScale();
       if (s !== scale) scale = s;
     }, 100);
-    return () => clearInterval(timer);
+
+    return () => {
+      clearInterval(timer);
+      instance.destroy();
+    };
   });
 
   let currentImage = $derived(images[currentIndex]);
