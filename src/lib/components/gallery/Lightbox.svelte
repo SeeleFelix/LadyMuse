@@ -1,7 +1,7 @@
 <script lang="ts">
   import ImageInfo from "./ImageInfo.svelte";
   import MobileImageSheet from "./MobileImageSheet.svelte";
-  import { isMobile } from "$lib/utils/is-mobile.svelte";
+  const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   let {
     images = [],
