@@ -47,7 +47,6 @@
     shortcut: string;
   }[] = [
     { key: "library", label: "Library", shortcut: "G" },
-    { key: "inspect", label: "Inspect", shortcut: "E" },
     { key: "compare", label: "Compare", shortcut: "C" },
   ];
 
