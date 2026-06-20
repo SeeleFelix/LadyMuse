@@ -88,17 +88,14 @@
 
   // Direct DOM transform during gesture — bypasses Svelte reactivity for smooth touch
   let imageEl = $state<HTMLImageElement>();
-  let gestureActive = false;
-  let rafScheduled = false;
 
-  function setTransform(sx: number, px: number, py: number) {
+  function setTransform(sx: number, tx: number, ty: number) {
     if (!imageEl) return;
-    imageEl.style.transform = `scale(${sx}) translate(${px / sx}px, ${py / sx}px)`;
+    imageEl.style.transform = `scale(${sx}) translate(${tx / sx}px, ${ty / sx}px)`;
     imageEl.style.transition = "none";
   }
 
   function endGesture() {
-    gestureActive = false;
     if (!imageEl) return;
     imageEl.style.transition = "transform 0.2s ease";
     const m = new DOMMatrixReadOnly(getComputedStyle(imageEl).transform);
@@ -107,23 +104,11 @@
     translateY = m.f;
   }
 
-  function rAFTransform(s: number, px: number, py: number) {
-    rafScheduled = false;
-    if (gestureActive) {
-      setTransform(Math.min(MAX_SCALE, Math.max(MIN_SCALE, s)), px, py);
-    }
-  }
-
   function scheduleGestureTransform(s: number, tx: number, ty: number) {
-    gestureActive = true;
     const sx = Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
     const px = sx <= 1 ? 0 : tx;
     const py = sx <= 1 ? 0 : ty;
     setTransform(sx, px, py);
-    if (!rafScheduled) {
-      rafScheduled = true;
-      requestAnimationFrame(() => rAFTransform(s, tx, ty));
-    }
   }
 
   const MIN_SCALE = 0.1;
@@ -165,11 +150,16 @@
     if (!showZoom) return;
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.15 : 0.15;
-    scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale + delta * scale));
-    if (scale <= 1) {
-      translateX = 0;
-      translateY = 0;
-    }
+    const newScale = Math.min(
+      MAX_SCALE,
+      Math.max(MIN_SCALE, scale + delta * scale),
+    );
+    const newTX = newScale <= 1 ? 0 : translateX;
+    const newTY = newScale <= 1 ? 0 : translateY;
+    setTransform(newScale, newTX, newTY);
+    scale = newScale;
+    translateX = newTX;
+    translateY = newTY;
   }
 
   function handleMouseDown(e: MouseEvent) {
@@ -188,8 +178,7 @@
       const ny = e.clientY - dragStart.y;
       if (Math.abs(nx - translateX) > 2 || Math.abs(ny - translateY) > 2)
         didDrag = true;
-      translateX = nx;
-      translateY = ny;
+      scheduleGestureTransform(scale, nx, ny);
     }
   }
 
@@ -208,13 +197,20 @@
     if (scale > 1) {
       resetTransform();
     } else {
+      // Zoom to click position
+      const rect = imageEl?.getBoundingClientRect();
+      const cx = rect ? e.clientX - rect.left : 0;
+      const cy = rect ? e.clientY - rect.top : 0;
+      const newScale = 3;
+      const tx = cx * (1 - newScale);
+      const ty = cy * (1 - newScale);
       if (imageEl) {
-        imageEl.style.transform = "scale(3) translate(0px, 0px)";
+        imageEl.style.transform = `scale(${newScale}) translate(${tx / newScale}px, ${ty / newScale}px)`;
         imageEl.style.transition = "transform 0.2s ease";
       }
-      scale = 3;
-      translateX = 0;
-      translateY = 0;
+      scale = newScale;
+      translateX = tx;
+      translateY = ty;
     }
   }
 
@@ -258,8 +254,24 @@
       );
       if (now - lastTapTime < 300 && dist < 30) {
         e.preventDefault();
-        if (scale > 1) resetTransform();
-        else scale = 3;
+        if (scale > 1) {
+          resetTransform();
+        } else {
+          // Zoom to tap position
+          const rect = imageEl?.getBoundingClientRect();
+          const cx = rect ? touches[0].clientX - rect.left : 0;
+          const cy = rect ? touches[0].clientY - rect.top : 0;
+          const newScale = 3;
+          const tx = cx * (1 - newScale);
+          const ty = cy * (1 - newScale);
+          if (imageEl) {
+            imageEl.style.transform = `scale(${newScale}) translate(${tx / newScale}px, ${ty / newScale}px)`;
+            imageEl.style.transition = "transform 0.2s ease";
+          }
+          scale = newScale;
+          translateX = tx;
+          translateY = ty;
+        }
         lastTapTime = 0;
         touchActive = false;
         return;
