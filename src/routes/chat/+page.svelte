@@ -111,21 +111,6 @@
     models.filter((m) => m.provider === selectedProvider),
   );
 
-  const TOOL_NAMES: Record<string, string> = {
-    explore_dimension: "知识库 · 浏览维度",
-    get_concept: "知识库 · 查看概念",
-    find_concepts: "知识库 · 搜索概念",
-    find_patterns: "知识库 · 匹配模式",
-    find_references: "知识库 · 查找参考",
-    search_my_prompts: "搜索历史提示词",
-    save_prompt: "保存提示词",
-    get_user_profile: "获取用户画像",
-    update_user_profile: "更新用户画像",
-    save_session_summary: "保存会话摘要",
-    search_civitai_images: "CivitAI · 搜索图片",
-    search_civitai_models: "CivitAI · 搜索模型",
-  };
-
   const marked = new Marked({
     renderer: {
       code({ text, lang }: { text: string; lang?: string }) {
@@ -677,13 +662,15 @@
     "08-danbooru-guidance.md": "Danbooru 标签库",
   };
 
-  const TOOL_LABELS: Record<string, string> = {
+  const TOOL_NAMES: Record<string, string> = {
     explore_dimension: "知识库 · 浏览维度",
     get_concept: "知识库 · 查看概念",
     find_concepts: "知识库 · 搜索概念",
     find_patterns: "知识库 · 匹配模式",
     find_references: "知识库 · 查找参考",
     search_my_prompts: "搜索历史提示词",
+    list_my_prompts: "浏览历史提示词",
+    get_prompt_by_id: "查看提示词详情",
     save_prompt: "保存提示词",
     get_user_profile: "获取用户画像",
     update_user_profile: "更新用户画像",
@@ -1039,7 +1026,7 @@
                       {tool.enabled
                       ? 'bg-violet-500/10 border-violet-500/20 text-violet-300'
                       : 'border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/80'}"
-                    >{TOOL_LABELS[tool.name] || tool.name}</button
+                    >{TOOL_NAMES[tool.name] || tool.name}</button
                   >
                 {/each}
               </div>

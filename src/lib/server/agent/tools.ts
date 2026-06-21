@@ -85,6 +85,79 @@ export const searchMyPrompts = tool({
   },
 });
 
+export const listMyPrompts = tool({
+  description:
+    "列出用户最近保存的提示词目录（不含完整正向提示词）。用于浏览历史记录，了解有哪些已保存的提示词。需要查看完整详情时，用 get_prompt_by_id 按 id 获取。",
+  inputSchema: z.object({
+    limit: z
+      .number()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("返回数量，默认 20，最大 50"),
+  }),
+  execute: async ({ limit = 20 }) => {
+    const results = await db
+      .select({
+        id: prompts.id,
+        title: prompts.title,
+        notes: prompts.notes,
+        rating: prompts.rating,
+        tags: prompts.tags,
+        createdAt: prompts.createdAt,
+      })
+      .from(prompts)
+      .orderBy(desc(prompts.createdAt))
+      .limit(limit);
+
+    return results.map((p) => ({
+      id: p.id,
+      title: p.title,
+      intent: p.notes,
+      rating: p.rating,
+      tags: p.tags,
+      createdAt: p.createdAt,
+    }));
+  },
+});
+
+export const getPromptById = tool({
+  description:
+    "按 ID 获取一条提示词的完整详情，包括正向提示词、反向提示词、生成参数等。用于查看从 list_my_prompts 目录中找到的某条提示词的完整内容。",
+  inputSchema: z.object({
+    id: z.number().describe("提示词 ID"),
+  }),
+  execute: async ({ id }) => {
+    const result = await db
+      .select()
+      .from(prompts)
+      .where(eq(prompts.id, id))
+      .limit(1);
+
+    if (result.length === 0) {
+      return { error: `未找到 ID 为 ${id} 的提示词` };
+    }
+
+    const p = result[0];
+    return {
+      id: p.id,
+      title: p.title,
+      positivePrompt: p.positivePrompt,
+      negativePrompt: p.negativePrompt,
+      intent: p.notes,
+      rating: p.rating,
+      tags: p.tags,
+      sampler: p.sampler,
+      scheduler: p.scheduler,
+      steps: p.steps,
+      cfgScale: p.cfgScale,
+      width: p.width,
+      height: p.height,
+      createdAt: p.createdAt,
+    };
+  },
+});
+
 export const savePrompt = tool({
   description:
     '保存提示词到用户个人库。当用户说"保存"或对当前提示词满意时使用。',
@@ -1078,6 +1151,8 @@ const allToolDefinitions = {
   find_patterns: findPatterns,
   find_references: findReferences,
   search_my_prompts: searchMyPrompts,
+  list_my_prompts: listMyPrompts,
+  get_prompt_by_id: getPromptById,
   save_prompt: savePrompt,
   get_user_profile: getUserProfile,
   update_user_profile: updateUserProfile,

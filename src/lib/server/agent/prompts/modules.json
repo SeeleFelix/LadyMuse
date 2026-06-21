@@ -64,6 +64,8 @@
     { "name": "find_patterns", "enabled": true },
     { "name": "find_references", "enabled": true },
     { "name": "search_my_prompts", "enabled": true },
+    { "name": "list_my_prompts", "enabled": true },
+    { "name": "get_prompt_by_id", "enabled": true },
     { "name": "save_prompt", "enabled": true },
     { "name": "get_user_profile", "enabled": true },
     { "name": "update_user_profile", "enabled": true },
