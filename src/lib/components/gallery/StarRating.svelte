@@ -5,7 +5,7 @@
   }: { value?: number; onchange?: (r: number) => void } = $props();
 
   function set(r: number) {
-    onchange?.(r);
+    onchange?.(r === value ? 0 : r);
   }
 </script>
 
@@ -18,4 +18,11 @@
         : 'text-zinc-600'} hover:text-amber-300 transition-colors">★</button
     >
   {/each}
+  {#if value > 0}
+    <button
+      onclick={() => onchange?.(0)}
+      class="text-xs text-zinc-600 hover:text-zinc-300 ml-1 transition-colors"
+      title="清除评分">✕</button
+    >
+  {/if}
 </div>

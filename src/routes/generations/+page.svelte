@@ -156,6 +156,7 @@
     if (idx >= 0) {
       lightboxIndex = idx;
       lightboxOpen = true;
+      store.select(img.relativePath, false, false);
     }
   }
 
@@ -381,16 +382,26 @@
 
     if (res.status === 409) {
       const body = await res.json();
-      const count = body.protected?.length ?? 0;
-      const allNames = (body.protected ?? [])
+      const protected_ = body.protected ?? [];
+      const pickCount = protected_.filter(
+        (p: { reason: string }) => p.reason === "pick",
+      ).length;
+      const ratingCount = protected_.filter(
+        (p: { reason: string }) => p.reason === "rating",
+      ).length;
+      const reasons: string[] = [];
+      if (pickCount > 0) reasons.push(`${pickCount} 张已标记 pick`);
+      if (ratingCount > 0) reasons.push(`${ratingCount} 张已评分`);
+      const allNames = protected_
+        .slice(0, 3)
         .map((p: { relativePath: string }) => p.relativePath.split("/").pop())
         .filter(Boolean);
       const names =
-        allNames.length > 3
-          ? `${allNames.slice(0, 3).join(", ")} 等 ${allNames.length} 张`
+        protected_.length > 3
+          ? `${allNames.join(", ")} 等 ${protected_.length} 张`
           : allNames.join(", ");
       showToast(
-        `${count} 张图片受保护（pick/评分）未删除：${names}。请先取消标记。`,
+        `${reasons.join("，")} 受保护无法删除：${names}。请先取消评分或取消 pick 标记。`,
         "error",
       );
       deleteConfirm = null;

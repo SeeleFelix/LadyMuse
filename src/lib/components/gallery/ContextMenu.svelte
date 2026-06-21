@@ -529,7 +529,7 @@
         >
           {#each [1, 2, 3, 4, 5] as r}
             <button
-              onclick={() => onrate(r)}
+              onclick={() => onrate(r === currentRating ? 0 : r)}
               class="flex items-center gap-1.5 w-full px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-700 text-left"
             >
               {#each [1, 2, 3, 4, 5] as s}
