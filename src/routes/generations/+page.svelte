@@ -141,12 +141,24 @@
     }
   }
 
-  // Long-press handler → opens Lightbox for single image, action sheet for multi-select
+  // Long-press handler → opens mobile action sheet
   function handleLongPress(path: string) {
+    const image = store.images.find((img) => img.relativePath === path);
+    if (!image) return;
     if (store.selectedPaths.size > 1 && store.selectedPaths.has(path)) {
       mobileSheetImage = null;
-      mobileSheetVisible = true;
+    } else {
+      store.select(path, false, false);
+      mobileSheetImage = image;
     }
+    mobileSheetVisible = true;
+  }
+
+  function handleDeleteSingle(img: ImageResult) {
+    deleteConfirm = {
+      paths: [img.relativePath],
+      message: `确定要删除 "${img.relativePath.split("/").pop()}" 吗？`,
+    };
   }
 
   function openLightboxForImage(img: ImageResult) {
@@ -692,7 +704,183 @@
   visible={mobileSheetVisible}
   onclose={() => (mobileSheetVisible = false)}
 >
-  {#if !mobileSheetImage}
+  {#if mobileSheetImage}
+    <!-- Single image actions -->
+    <button
+      onclick={() => {
+        mobileSheetVisible = false;
+        openLightboxForImage(mobileSheetImage!);
+      }}
+      class="flex items-center gap-3 w-full px-1 py-3 text-sm text-zinc-200 border-b border-zinc-700/50"
+    >
+      <svg
+        class="w-5 h-5 text-zinc-400"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"
+        />
+      </svg>
+      查看大图
+    </button>
+
+    <!-- Rate -->
+    <div
+      class="flex items-center gap-3 w-full px-1 py-3 text-sm text-zinc-200 border-b border-zinc-700/50"
+    >
+      <span class="text-zinc-500 text-xs w-5 text-center">★</span>
+      <div class="flex gap-1">
+        {#each [1, 2, 3, 4, 5] as r}
+          <button
+            onclick={() => {
+              store.updateAttributes(mobileSheetImage!.relativePath, {
+                rating: r,
+              });
+              mobileSheetVisible = false;
+            }}
+            class="text-lg {r <= (mobileSheetImage!.rating ?? 0)
+              ? 'text-amber-400'
+              : 'text-zinc-600'}">★</button
+          >
+        {/each}
+      </div>
+    </div>
+
+    <!-- Color -->
+    <div
+      class="flex items-center gap-3 w-full px-1 py-3 text-sm text-zinc-200 border-b border-zinc-700/50"
+    >
+      <span class="text-zinc-500 text-xs w-5 text-center">●</span>
+      <div class="flex gap-2">
+        {#each [["red", "bg-red-500"], ["yellow", "bg-yellow-500"], ["green", "bg-green-500"], ["blue", "bg-blue-500"], ["purple", "bg-purple-500"]] as [key, cls]}
+          <button
+            onclick={() => {
+              store.updateAttributes(mobileSheetImage!.relativePath, {
+                colorLabel: mobileSheetImage!.colorLabel === key ? null : key,
+              });
+              mobileSheetVisible = false;
+            }}
+            class="w-6 h-6 rounded-full {cls} {mobileSheetImage!.colorLabel ===
+            key
+              ? 'ring-2 ring-white'
+              : ''}"
+            aria-label={key}
+          ></button>
+        {/each}
+      </div>
+    </div>
+
+    <!-- Flag -->
+    <div
+      class="flex items-center gap-3 w-full px-1 py-3 text-sm text-zinc-200 border-b border-zinc-700/50"
+    >
+      <span class="text-zinc-500 text-xs w-5 text-center">⚑</span>
+      <div class="flex gap-2">
+        <button
+          onclick={() => {
+            store.updateAttributes(mobileSheetImage!.relativePath, {
+              flag: "pick",
+            });
+            mobileSheetVisible = false;
+          }}
+          class="px-3 py-1 rounded text-xs {mobileSheetImage!.flag === 'pick'
+            ? 'bg-green-500/20 text-green-400'
+            : 'text-zinc-400 border border-zinc-700'}">Pick</button
+        >
+        <button
+          onclick={() => {
+            store.updateAttributes(mobileSheetImage!.relativePath, {
+              flag: "reject",
+            });
+            mobileSheetVisible = false;
+          }}
+          class="px-3 py-1 rounded text-xs {mobileSheetImage!.flag === 'reject'
+            ? 'bg-red-500/20 text-red-400'
+            : 'text-zinc-400 border border-zinc-700'}">Reject</button
+        >
+      </div>
+    </div>
+
+    <!-- Copy link -->
+    <button
+      onclick={() => {
+        navigator.clipboard.writeText(
+          `${window.location.origin}/api/comfyui/images/${encodeURIComponent(mobileSheetImage!.relativePath)}`,
+        );
+        mobileSheetVisible = false;
+        showToast("链接已复制", "success");
+      }}
+      class="flex items-center gap-3 w-full px-1 py-3 text-sm text-zinc-200 border-b border-zinc-700/50"
+    >
+      <svg
+        class="w-5 h-5 text-zinc-400"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+        />
+      </svg>
+      复制链接
+    </button>
+
+    <!-- Download -->
+    <button
+      onclick={() => {
+        handleDownload(mobileSheetImage!.relativePath);
+        mobileSheetVisible = false;
+      }}
+      class="flex items-center gap-3 w-full px-1 py-3 text-sm text-zinc-200 border-b border-zinc-700/50"
+    >
+      <svg
+        class="w-5 h-5 text-zinc-400"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+        />
+      </svg>
+      下载
+    </button>
+
+    <!-- Delete -->
+    <button
+      onclick={() => {
+        mobileSheetVisible = false;
+        handleDeleteSingle(mobileSheetImage!);
+      }}
+      class="flex items-center gap-3 w-full px-1 py-3 text-sm text-red-400"
+    >
+      <svg
+        class="w-5 h-5"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+        />
+      </svg>
+      删除
+    </button>
+  {:else}
     <!-- Multi-select actions -->
     <div class="px-1 py-3 text-sm text-zinc-500 border-b border-zinc-700/50">
       {store.selectedPaths.size} 张已选
